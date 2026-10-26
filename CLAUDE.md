@@ -79,6 +79,7 @@ Single-module, single-activity Compose app. Manual DI: `QingheApp` creates `di/A
 - Add/edit screen supports two-level category selection and pre-selects the existing big/small category; subcategories are shown as a **multi-row FlowRow** (no horizontal scrolling). Be careful not to clear `categoryId` while `categories` is still loading from the DB (this caused an edit-from-overlay bug).
 - No Navigation library. Add screens? Prefer the existing overlay pattern. `AddTransactionScreen` is shared for new/edit.
 - Settings header displays `vVERSION · BUILD_TYPE`; keep it visible for APK debugging.
+- The main 「我的」 page is grouped navigation only (自动记账 / 账本 / 关于与更新). Auto-capture permissions, switches and diagnostics live in `AutoSettingsScreen`, a full-screen overlay controlled by `showAutoSettings` in `LedgerRoot`. Use `SettingsGroup` / `GroupedNavRow` / `GroupedSwitchRow` / `GroupedValueRow` from `ui/components/Common.kt`; do not go back to one card per row.
 
 ### GitHub updater
 
@@ -98,6 +99,7 @@ Single-module, single-activity Compose app. Manual DI: `QingheApp` creates `di/A
 
 ## Invariants / gotchas
 
+- **README.md is the public GitHub landing page.** Keep personal validation notes and local machine paths out of it; detailed troubleshooting goes in `docs/TROUBLESHOOTING.md`, version history in `docs/release-notes/`, and filing materials in `docs/filing/`.
 - **Keep every project artifact inside the repository.** Never write release notes, APKs, tokens, credentials, or test downloads to `%TEMP%` or anywhere else on C:. Use `docs/release-notes/vX.Y.Z.md` for release notes (the publish script reads it automatically), `dist/archive/` for old APKs, and `local-temp/` for transient helpers — the last two are git-ignored. Credentials stay in `.github-token` and `.git-credentials` at the repo root and are git-ignored.
 - Do not add OCR; the accessibility extraction is intentionally non-OCR.
 - Do not put release notes, "what's new" text, or version-changelog cards into app screens. In-app help text should describe current behavior only; release notes belong in `docs/release-notes/` and the GitHub Release.

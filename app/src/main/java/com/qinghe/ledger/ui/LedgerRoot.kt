@@ -49,6 +49,7 @@ import com.qinghe.ledger.data.local.TransactionEntity
 import com.qinghe.ledger.data.model.AccountType
 import com.qinghe.ledger.ui.screens.AccountManagerScreen
 import com.qinghe.ledger.ui.screens.AddTransactionScreen
+import com.qinghe.ledger.ui.screens.AutoSettingsScreen
 import com.qinghe.ledger.ui.screens.BudgetScreen
 import com.qinghe.ledger.ui.screens.CategoryManagerScreen
 import com.qinghe.ledger.ui.screens.HomeScreen
@@ -118,6 +119,7 @@ fun LedgerRoot(editTransactionId: MutableStateFlow<Long?>? = null) {
     var showAccounts by remember { mutableStateOf(false) }
     var showCategories by remember { mutableStateOf(false) }
     var showRules by remember { mutableStateOf(false) }
+    var showAutoSettings by remember { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -261,12 +263,14 @@ fun LedgerRoot(editTransactionId: MutableStateFlow<Long?>? = null) {
         }
     }
 
-    val overlayVisible = addTarget != null || showAccounts || showCategories || showRules
+    val overlayVisible = addTarget != null || showAccounts || showCategories ||
+        showRules || showAutoSettings
     BackHandler(enabled = overlayVisible) {
         addTarget = null
         showAccounts = false
         showCategories = false
         showRules = false
+        showAutoSettings = false
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -340,11 +344,7 @@ fun LedgerRoot(editTransactionId: MutableStateFlow<Long?>? = null) {
                     )
                     else -> SettingsScreen(
                         settings = settings,
-                        latestAuto = latestAuto,
-                        latestAutoCategoryPath = latestAutoCategoryPath,
-                        onToggleNotificationAuto = viewModel::setNotificationAutoEnabled,
-                        onToggleAccessibilityAuto = viewModel::setAccessibilityAutoEnabled,
-                        onToggleShowAutoNotification = viewModel::setShowAutoNotification,
+                        onOpenAutoSettings = { showAutoSettings = true },
                         onOpenAccounts = { showAccounts = true },
                         onOpenCategories = { showCategories = true },
                         onOpenRules = { showRules = true },
@@ -408,6 +408,18 @@ fun LedgerRoot(editTransactionId: MutableStateFlow<Long?>? = null) {
                 onBack = { showRules = false },
                 onAdd = viewModel::addRule,
                 onDelete = viewModel::deleteRule
+            )
+        }
+
+        if (showAutoSettings) {
+            AutoSettingsScreen(
+                settings = settings,
+                latestAuto = latestAuto,
+                latestAutoCategoryPath = latestAutoCategoryPath,
+                onBack = { showAutoSettings = false },
+                onToggleNotificationAuto = viewModel::setNotificationAutoEnabled,
+                onToggleAccessibilityAuto = viewModel::setAccessibilityAutoEnabled,
+                onToggleShowAutoNotification = viewModel::setShowAutoNotification
             )
         }
 

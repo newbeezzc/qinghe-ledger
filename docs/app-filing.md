@@ -95,3 +95,5 @@
 - [中国政府网：通知全文](https://www.gov.cn/zhengce/zhengceku/202308/content_6897341.htm)
 - [华为开发者联盟：单机应用是否需要备案](https://developer.huawei.com/consumer/cn/forum/topic/0203225539738472361)
 - [小米：移动应用程序（APP）备案指引](https://dev.mi.com/xiaomihyperos/documentation/detail?pId=1739)
+
+请您提前准备好如下材料（红色的为必填项）： APP信息：应用名称、运行平台、应用logo(图片)、应用类型、应用包名、月活跃用户数量、注册用户总量、相关前置许可、运行截图（1~6张图片）、功能描述 ；

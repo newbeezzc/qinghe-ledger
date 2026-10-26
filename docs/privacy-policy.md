@@ -1,6 +1,6 @@
 # 青禾记账 隐私政策
 
-> 草稿说明：正式发布或提交备案前，请把「运营者」和「联系方式」替换为你的真实信息；如后续增加联网功能，需要同步更新本政策。
+> 备案/上架提示：如提交 APP 备案或应用商店，请把「运营者」替换为你的实名信息，并补充可联系的邮箱；公开使用时可保留 GitHub 联系方式。
 
 生效日期：2026-10-26
 
@@ -54,6 +54,6 @@ GitHub 的隐私政策见：https://docs.github.com/site-policy/privacy-policies
 
 ## 8. 联系我们
 
-运营者：[个人开发者名称]
-联系邮箱：[联系邮箱]
+运营者：青禾记账开发者（GitHub @newbeezzc）
+联系渠道：https://github.com/newbeezzc/qinghe-ledger/issues
 项目地址：https://github.com/newbeezzc/qinghe-ledger
