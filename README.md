@@ -30,9 +30,9 @@
 | --- | --- | --- |
 | ![](docs/screenshots/01-home.png) | ![](docs/screenshots/02-add-expense.png) | ![](docs/screenshots/03-stats.png) |
 
-| 预算 | 我的 | 自动记账卡片 |
+| 预算 | 我的 | 自动记账设置 |
 | --- | --- | --- |
-| ![](docs/screenshots/04-budget.png) | ![](docs/screenshots/05-settings.png) | ![](docs/screenshots/10-auto-overlay.png) |
+| ![](docs/screenshots/04-budget.png) | ![](docs/screenshots/05-settings.png) | ![](docs/screenshots/12-auto-settings.png) |
 
 更多截图见 [`docs/screenshots/`](docs/screenshots/)。
 
