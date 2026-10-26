@@ -42,7 +42,7 @@
   - `LazyColumn` 使用稳定 key 与 `contentType`，行组件只接收预计算字段；
   - 青禾界面在前台时暂停无障碍树扫描，避免后台扫描和列表滚动抢主线程；
   - 缓存 `DateTimeFormatter` 与分类颜色，减少重复分配；
-  - 继续使用 R8 minify/shrink 的 release 构建（2.7 MB），版本标签显示 `v1.0.10 · release`；
+  - 继续使用 R8 minify/shrink 的 release 构建（2.7 MB），版本标签显示 `v1.0.7 · release`；
   - 实测 release：微信账单详情页 → 悬浮卡片「餐饮-咖啡 ¥26.60」；300 条账目压力滚动无崩溃；
   - v1.0.6 的“收窄事件”方案已回滚，避免再次影响识别。
 - v1.0.5 验证：

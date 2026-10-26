@@ -61,7 +61,8 @@ version, sha = sys.argv[1], sys.argv[2]
 path = "README.md"
 text = open(path, encoding="utf-8").read()
 text = re.sub(r"qinghe-\d+\.\d+\.\d+\.apk", f"qinghe-{version}.apk", text)
-text = re.sub(r"v\d+\.\d+\.\d+ · release", f"v{version} · release", text)
+text = re.sub(r"(安装后在「我的」标题旁可以看到 `)v\d+\.\d+\.\d+( · release`)",
+              rf"\g<1>v{version}\g<2>", text)
 text = re.sub(r"(?m)^[0-9a-f]{64}$", sha, text)
 open(path, "w", encoding="utf-8", newline="\n").write(text)
 PY
