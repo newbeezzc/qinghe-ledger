@@ -38,12 +38,26 @@ class AutoRecorder(
 
                 val result: AutoRecordResult =
                     repository.recordAuto(pkg, parsed, source) ?: return@withLock
+
+                fun fallbackReminder() {
+                    AutoRecordEvents.notify(result)
+                    AutoRecordNotifier.notify(context, result, source)
+                }
+
                 if (current.showAutoRecordNotification) {
-                    val overlayShown = AutoRecordOverlay.show(context, result)
-                    if (!overlayShown) {
-                        AutoRecordEvents.notify(result)
-                        AutoRecordNotifier.notify(context, result, source)
-                    }
+                    val overlayPosted = AutoRecordOverlay.show(
+                        context = context,
+                        result = result,
+                        onCancel = {
+                            scope.launch {
+                                if (repository.deleteAutoTransaction(result.transactionId)) {
+                                    AutoRecordEvents.notifyCancelled(result)
+                                }
+                            }
+                        },
+                        onUnavailable = { fallbackReminder() }
+                    )
+                    if (!overlayPosted) fallbackReminder()
                 }
             }
         }

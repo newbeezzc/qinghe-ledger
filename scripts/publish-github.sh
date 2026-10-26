@@ -77,7 +77,7 @@ fi
 git push origin HEAD
 
 echo "==> Publishing GitHub Release v${VERSION}"
-NOTES="青禾记账 v${VERSION}"
+NOTES="${RELEASE_NOTES:-青禾记账 v${VERSION}}"
 if command -v gh >/dev/null 2>&1; then
     if gh release view "v${VERSION}" --repo "$REPO" >/dev/null 2>&1; then
         gh release upload "v${VERSION}" "$APK" --repo "$REPO" --clobber

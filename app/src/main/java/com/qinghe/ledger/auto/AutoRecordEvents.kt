@@ -13,7 +13,14 @@ object AutoRecordEvents {
     private val _events = MutableSharedFlow<AutoRecordResult>(extraBufferCapacity = 8)
     val events: SharedFlow<AutoRecordResult> = _events.asSharedFlow()
 
+    private val _cancelled = MutableSharedFlow<AutoRecordResult>(extraBufferCapacity = 8)
+    val cancelled: SharedFlow<AutoRecordResult> = _cancelled.asSharedFlow()
+
     fun notify(result: AutoRecordResult) {
         _events.tryEmit(result)
+    }
+
+    fun notifyCancelled(result: AutoRecordResult) {
+        _cancelled.tryEmit(result)
     }
 }

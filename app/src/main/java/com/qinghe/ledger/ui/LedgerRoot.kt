@@ -230,6 +230,14 @@ fun LedgerRoot(editTransactionId: MutableStateFlow<Long?>? = null) {
         }
     }
 
+    LaunchedEffect(Unit) {
+        AutoRecordEvents.cancelled.collect { result ->
+            snackbarHostState.showSnackbar(
+                "已取消这次自动记账 · ${MoneyFormat.withSymbol(result.amountCents)}"
+            )
+        }
+    }
+
     LaunchedEffect(requestedEditId) {
         val id = requestedEditId ?: return@LaunchedEffect
         val transaction = viewModel.findTransaction(id)

@@ -29,22 +29,43 @@ import com.qinghe.ledger.util.formatDateTime
  * high-priority notification when the permission is missing.
  */
 object AutoRecordOverlay {
+    private const val AUTO_DISMISS_MS = 3_000L
+
     private val mainHandler = Handler(Looper.getMainLooper())
     private var overlayView: View? = null
     private var windowManager: WindowManager? = null
     private var dismissRunnable: Runnable? = null
 
-    fun show(context: Context, result: AutoRecordResult): Boolean {
+    /**
+     * Shows the overlay for every auto-recorded payment. Returns false when the
+     * overlay permission is missing so the caller can fall back to a notification;
+     * if adding the window fails asynchronously, [onUnavailable] is invoked.
+     */
+    fun show(
+        context: Context,
+        result: AutoRecordResult,
+        onCancel: () -> Unit,
+        onUnavailable: () -> Unit
+    ): Boolean {
         if (!Settings.canDrawOverlays(context)) return false
         val appContext = context.applicationContext
-        mainHandler.post { showInternal(appContext, result) }
+        mainHandler.post {
+            val shown = runCatching {
+                showInternal(appContext, result, onCancel)
+            }.getOrDefault(false)
+            if (!shown) onUnavailable()
+        }
         return true
     }
 
-    private fun showInternal(context: Context, result: AutoRecordResult) {
+    private fun showInternal(
+        context: Context,
+        result: AutoRecordResult,
+        onCancel: () -> Unit
+    ): Boolean {
         dismiss()
         val manager = context.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
-            ?: return
+            ?: return false
         windowManager = manager
 
         val root = FrameLayout(context).apply {
@@ -119,6 +140,18 @@ object AutoRecordOverlay {
             gravity = Gravity.END or Gravity.CENTER_VERTICAL
             setPadding(0, dp(context, 12), 0, 0)
         }
+        val cancel = TextView(context).apply {
+            text = "取消记账"
+            setTextColor(Color.parseColor("#B3261E"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            setPadding(dp(context, 14), dp(context, 9), dp(context, 14), dp(context, 9))
+            setOnClickListener {
+                dismiss()
+                onCancel()
+            }
+        }
+        buttons.addView(cancel)
+
         val later = TextView(context).apply {
             text = "知道了"
             setTextColor(Color.parseColor("#5D665F"))
@@ -182,12 +215,17 @@ object AutoRecordOverlay {
             y = dp(context, 84)
         }
 
-        runCatching {
+        return runCatching {
             manager.addView(root, params)
             overlayView = root
             val runnable = Runnable { dismiss() }
             dismissRunnable = runnable
-            mainHandler.postDelayed(runnable, 15_000L)
+            mainHandler.postDelayed(runnable, AUTO_DISMISS_MS)
+            true
+        }.getOrElse {
+            overlayView = null
+            windowManager = null
+            false
         }
     }
 

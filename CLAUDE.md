@@ -63,12 +63,13 @@ Single-module, single-activity Compose app. Manual DI: `QingheApp` creates `di/A
 
 `PaymentNotificationListener` and `PaymentAccessibilityService` feed `PaymentParser` (pure Kotlin, JVM-testable), then `AutoRecorder`:
 
-- `PaymentParser.analyzeNotification` / `analyzeScreen` return `ParseResult(payment, reason)`. It parses amounts (¥/元/standalone), merchant, payment time, and rejects bill summaries/chats. Keep it free of Android APIs so `PaymentParserTest` works.
+- `PaymentParser.analyzeNotification` / `analyzeScreen` return `ParseResult(payment, reason)`. It parses amounts (¥/元/standalone), merchant, payment time, and rejects bill summaries/chats. A payment **success page** needs only the success title + amount + one context marker (完成/支付方式/零钱/…), while a bill detail page still needs two markers. Keep it free of Android APIs so `PaymentParserTest` works.
 - `PaymentAccessibilityService` is intentionally layered (no OCR): DFS over `event.source`, active root and all interactive windows → `findAccessibilityNodeInfosByText` + parent backtracking → retries at 0/0.8/2/3.5 s. It listens to a broad event set (`typeAllMask`); narrowing events previously broke WeChat bill recognition.
 - `util/AppVisibility` is set by `MainActivity`; the accessibility service skips scans while the bookkeeping UI is foreground to avoid competing with list rendering.
 - `AutoRecorder` holds a `Mutex` around duplicate-check + insert. Dedup checks both recent `createdAt` (90 s) and payment `occurredAt` (±120 s), so the notification and accessibility paths cannot double-record the same payment, and reopening an old bill does not duplicate it.
 - For auto records, `note` is the merchant (or empty), `occurredAt` is the parsed payment time / notification `postTime`, and the category is resolved through auto-rules plus `subcategoryHints`. If the user edits an auto record's category, the repository learns/updates a keyword rule from merchant (or note).
-- `AutoRecordOverlay` shows the bottom system overlay and its 修改 button; it requires `SYSTEM_ALERT_WINDOW` and falls back to the high-priority notification. The edit intent is passed through `MainActivity` (`EXTRA_EDIT_TRANSACTION_ID`) into `LedgerRoot`.
+- `AutoRecordOverlay` shows the bottom system overlay and its 修改 / 取消记账 buttons; it requires `SYSTEM_ALERT_WINDOW` and falls back to the high-priority notification when the permission is missing or `addView` fails. The card auto-dismisses after 3 s. 取消记账 calls `LedgerRepository.deleteAutoTransaction` (manual rows are protected). The edit intent is passed through `MainActivity` (`EXTRA_EDIT_TRANSACTION_ID`) into `LedgerRoot`.
+- Both capture paths go through `AutoRecorder.handle`, so every auto record attempts the overlay — do not add a second insert path that bypasses it.
 
 ### UI
 
@@ -92,7 +93,7 @@ Single-module, single-activity Compose app. Manual DI: `QingheApp` creates `di/A
 
 - `app/src/test/java/com/qinghe/ledger/auto/PaymentParserTest.kt` — notification/screen parsing, false positives, timestamps, categories/notes.
 - `app/src/test/java/com/qinghe/ledger/update/UpdateVersionTest.kt` — semver comparison.
-- Current expected total: 21 tests (17 parser + 4 updater).
+- Current expected total: 25 tests (21 parser + 4 updater).
 
 ## Invariants / gotchas
 

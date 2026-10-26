@@ -191,6 +191,48 @@ class PaymentParserTest {
     }
 
     @Test
+    fun `wechat payment success page is parsed`() {
+        val result = PaymentParser.fromScreen(
+            PaymentParser.WECHAT_PACKAGE,
+            "支付成功 ¥26.60 瑞幸咖啡 支付方式 零钱 完成"
+        )
+        requireNotNull(result)
+        assertEquals(PaymentType.EXPENSE, result.type)
+        assertEquals(2660L, result.amountCents)
+    }
+
+    @Test
+    fun `alipay payment success page is parsed`() {
+        val result = PaymentParser.fromScreen(
+            PaymentParser.ALIPAY_PACKAGE,
+            "支付成功 ¥12.34 老王便利店 付款方式 余额宝 查看账单 完成"
+        )
+        requireNotNull(result)
+        assertEquals(PaymentType.EXPENSE, result.type)
+        assertEquals(1234L, result.amountCents)
+    }
+
+    @Test
+    fun `success page with only a done button is parsed`() {
+        val result = PaymentParser.fromScreen(
+            PaymentParser.WECHAT_PACKAGE,
+            "支付成功 9.90 完成"
+        )
+        requireNotNull(result)
+        assertEquals(PaymentType.EXPENSE, result.type)
+        assertEquals(990L, result.amountCents)
+    }
+
+    @Test
+    fun `success words in a chat screen are ignored`() {
+        val result = PaymentParser.fromScreen(
+            PaymentParser.WECHAT_PACKAGE,
+            "张三 支付成功 ¥25.00 聊天信息 按住 说话 交易时间 14:35"
+        )
+        assertNull(result)
+    }
+
+    @Test
     fun `comma separated amount is parsed`() {
         val result = PaymentParser.fromNotification(
             PaymentParser.ALIPAY_PACKAGE,

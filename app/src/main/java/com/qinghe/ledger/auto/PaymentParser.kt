@@ -67,8 +67,8 @@ object PaymentParser {
         "入账", "红包已领取", "收到转账"
     )
     private val expenseWords = listOf(
-        "支付成功", "付款成功", "已支付", "支付了", "扣款成功", "扣款",
-        "消费", "支出", "转账给", "成功付款", "付款", "交易成功"
+        "支付成功", "付款成功", "支付完成", "付款完成", "已支付", "支付了",
+        "扣款成功", "扣款", "消费", "支出", "转账给", "成功付款", "付款", "交易成功"
     )
     private val screenPaymentWords = listOf(
         "支付", "交易", "转账", "收款", "退款", "消费", "扣款", "账单"
@@ -77,6 +77,30 @@ object PaymentParser {
     private val billNoiseWords = listOf(
         "本月账单", "月账单", "年度账单", "账单已出", "账单日", "还款提醒",
         "账单分期", "额度提醒", "账单汇总"
+    )
+
+    private val successScreenWords = listOf(
+        "支付成功", "付款成功", "支付完成", "付款完成", "交易成功",
+        "转账成功", "收款成功", "已收款", "收款到账"
+    )
+
+    /**
+     * Fields that appear on a payment result page ("支付成功" / "付款成功").
+     * Such a page often has only the success title, amount, merchant and a
+     * 完成 button, so it is accepted with one context field instead of the two
+     * bill-detail markers required elsewhere.
+     */
+    private val successPageContext = listOf(
+        "交易单号", "账单详情", "付款方式", "支付方式", "当前状态",
+        "零钱", "花呗", "余额宝", "银行卡", "商户全称", "商户名称",
+        "收款方", "商品说明", "订单号", "完成", "查看账单",
+        "账单分类", "支付时间", "付款时间", "交易时间"
+    )
+
+    // A chat page can contain words like "支付成功" and an amount; skip it
+    // before the success-page rule gets a chance to fire.
+    private val chatNoiseWords = listOf(
+        "按住 说话", "按住说话", "聊天信息", "语音通话", "视频通话"
     )
 
     private val screenIndicators = listOf(
@@ -123,6 +147,9 @@ object PaymentParser {
         if (billNoiseWords.any { combined.contains(it) }) {
             return ParseResult(null, "账单汇总/还款提醒，已忽略")
         }
+        if (chatNoiseWords.any { combined.contains(it) }) {
+            return ParseResult(null, "聊天界面，已忽略")
+        }
         return parse(pkg, combined, requireScreenIndicators = true)
     }
 
@@ -139,9 +166,17 @@ object PaymentParser {
         }
 
         if (requireScreenIndicators) {
-            val indicators = screenIndicators.count { combined.contains(it) }
-            if (indicators < 2) {
-                return ParseResult(null, "支付页面标记不足（已识别 $indicators/2）")
+            val isSuccessPage = successScreenWords.any { combined.contains(it) }
+            if (isSuccessPage) {
+                val contextMarkers = successPageContext.count { combined.contains(it) }
+                if (contextMarkers < 1) {
+                    return ParseResult(null, "支付成功页标记不足（已识别 $contextMarkers/1）")
+                }
+            } else {
+                val indicators = screenIndicators.count { combined.contains(it) }
+                if (indicators < 2) {
+                    return ParseResult(null, "支付页面标记不足（已识别 $indicators/2）")
+                }
             }
         }
 

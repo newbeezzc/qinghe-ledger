@@ -117,6 +117,14 @@ class LedgerRepository(private val db: AppDatabase) {
     suspend fun deleteTransaction(transaction: TransactionEntity) =
         transactionDao.delete(transaction)
 
+    /** Deletes an auto-recorded entry, e.g. when the user taps 取消记账 on the overlay. */
+    suspend fun deleteAutoTransaction(id: Long): Boolean {
+        val transaction = transactionDao.findById(id) ?: return false
+        if (transaction.source == TransactionSource.MANUAL.name) return false
+        transactionDao.delete(transaction)
+        return true
+    }
+
     suspend fun findTransaction(id: Long): TransactionEntity? =
         transactionDao.findById(id)
 
