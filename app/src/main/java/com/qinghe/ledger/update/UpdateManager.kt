@@ -23,7 +23,8 @@ data class UpdateInfo(
     val changelog: String,
     val downloadUrl: String,
     val assetName: String,
-    val sizeBytes: Long
+    val sizeBytes: Long,
+    val apiDownloadUrl: String? = null
 )
 
 sealed interface UpdateCheckResult {
@@ -75,6 +76,7 @@ object UpdateManager {
             var apkUrl: String? = null
             var apkName: String? = null
             var apkSize = 0L
+            var apkAssetId = 0L
             if (assets != null) {
                 for (index in 0 until assets.length()) {
                     val asset = assets.optJSONObject(index) ?: continue
@@ -89,6 +91,7 @@ object UpdateManager {
                         apkUrl = url
                         apkName = name
                         apkSize = asset.optLong("size")
+                        apkAssetId = asset.optLong("id")
                     }
                 }
             }
@@ -104,7 +107,10 @@ object UpdateManager {
                     changelog = json.optString("body").take(4000),
                     downloadUrl = apkUrl,
                     assetName = apkName,
-                    sizeBytes = apkSize
+                    sizeBytes = apkSize,
+                    apiDownloadUrl = apkAssetId.takeIf { it > 0 }?.let {
+                        "https://api.github.com/repos/$normalized/releases/assets/$it"
+                    }
                 )
             )
         } catch (error: Exception) {
@@ -121,20 +127,35 @@ object UpdateManager {
                 .ifBlank { "qinghe-update.apk" }
                 .let { if (it.endsWith(".apk", ignoreCase = true)) it else "$it.apk" }
             val outputFile = File(directory, safeName)
-            val connection = openConnection(info.downloadUrl)
-            val code = connection.responseCode
-            if (code !in 200..299) {
-                connection.disconnect()
-                throw IllegalStateException("下载失败（HTTP $code）")
+            // api.github.com + release-assets.githubusercontent.com is usually reachable
+            // where github.com release downloads are blocked or time out (e.g. mainland China).
+            val candidates = buildList {
+                info.apiDownloadUrl?.let { add(it to true) }
+                add(info.downloadUrl to false)
             }
-            connection.inputStream.use { input ->
-                outputFile.outputStream().use { output -> input.copyTo(output) }
+            var lastError: Exception? = null
+            for ((url, apiAsset) in candidates) {
+                try {
+                    val connection = openConnection(url, downloadAsset = apiAsset)
+                    val code = connection.responseCode
+                    if (code !in 200..299) {
+                        connection.disconnect()
+                        throw IllegalStateException("下载失败（HTTP $code）")
+                    }
+                    connection.inputStream.use { input ->
+                        outputFile.outputStream().use { output -> input.copyTo(output) }
+                    }
+                    connection.disconnect()
+                    if (!outputFile.exists() || outputFile.length() == 0L) {
+                        throw IllegalStateException("下载的文件为空")
+                    }
+                    return@withContext outputFile
+                } catch (error: Exception) {
+                    outputFile.delete()
+                    lastError = error
+                }
             }
-            connection.disconnect()
-            if (!outputFile.exists() || outputFile.length() == 0L) {
-                throw IllegalStateException("下载的文件为空")
-            }
-            outputFile
+            throw lastError ?: IllegalStateException("下载更新失败")
         }
 
     fun validateApk(context: Context, file: File): String? {
@@ -246,7 +267,8 @@ object UpdateManager {
 
     private fun openConnection(
         url: String,
-        apiRequest: Boolean = false
+        apiRequest: Boolean = false,
+        downloadAsset: Boolean = false
     ): HttpURLConnection {
         var current = url
         repeat(6) {
@@ -257,6 +279,9 @@ object UpdateManager {
             connection.setRequestProperty("User-Agent", "QingheLedger/${BuildConfig.VERSION_NAME}")
             if (apiRequest) {
                 connection.setRequestProperty("Accept", "application/vnd.github+json")
+            } else if (downloadAsset) {
+                // Required for the release asset endpoint to redirect to the CDN.
+                connection.setRequestProperty("Accept", "application/octet-stream")
             }
             val code = connection.responseCode
             if (code in 300..399) {

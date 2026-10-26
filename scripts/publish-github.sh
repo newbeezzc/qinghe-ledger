@@ -93,6 +93,7 @@ else
         exit 1
     fi
     API="https://api.github.com/repos/$REPO"
+    UPLOADS="https://uploads.github.com/repos/$REPO"
     RELEASE_ID="$(curl -sS -H "Authorization: Bearer $TOKEN" "$API/releases/tags/v${VERSION}" \
         | python -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || true)"
     if [[ -z "$RELEASE_ID" ]]; then
@@ -108,18 +109,29 @@ PY
         echo "Failed to create or find the release." >&2
         exit 1
     fi
-    UPLOAD_JSON="$(mktemp)"
-    if ! curl -sS --fail-with-body -o "$UPLOAD_JSON" -X POST -H "Authorization: Bearer $TOKEN" \
+    ASSET_NAME="$(basename "$APK")"
+    EXISTING_ASSET_ID="$(curl -sS -H "Authorization: Bearer $TOKEN" "$API/releases/${RELEASE_ID}" \
+        | ASSET_NAME="$ASSET_NAME" python -c "import os,sys,json; d=json.load(sys.stdin); print(next((a['id'] for a in d.get('assets',[]) if a['name']==os.environ['ASSET_NAME']),''))" 2>/dev/null || true)"
+    if [[ -n "$EXISTING_ASSET_ID" ]]; then
+        echo "    replacing existing asset ${ASSET_NAME}"
+        curl -sS -X DELETE -H "Authorization: Bearer $TOKEN" "$API/releases/assets/${EXISTING_ASSET_ID}" >/dev/null
+    fi
+    if ! UPLOAD_RESULT="$(curl -sS --fail-with-body -X POST -H "Authorization: Bearer $TOKEN" \
         -H "Accept: application/vnd.github+json" \
         -H "Content-Type: application/octet-stream" \
         --data-binary "@${APK}" \
-        "$API/releases/${RELEASE_ID}/assets?name=$(basename "$APK")"; then
+        "$UPLOADS/releases/${RELEASE_ID}/assets?name=${ASSET_NAME}")"; then
         echo "Asset upload failed:" >&2
-        cat "$UPLOAD_JSON" >&2
-        rm -f "$UPLOAD_JSON"
+        echo "$UPLOAD_RESULT" >&2
         exit 1
     fi
-    rm -f "$UPLOAD_JSON"
+    UPLOADED_SIZE="$(printf '%s' "$UPLOAD_RESULT" | python -c "import sys,json; print(json.load(sys.stdin).get('size',0))")"
+    LOCAL_SIZE="$(stat -c%s "$APK")"
+    if [[ "$UPLOADED_SIZE" -ne "$LOCAL_SIZE" ]]; then
+        echo "Upload size mismatch: local ${LOCAL_SIZE}, remote ${UPLOADED_SIZE}" >&2
+        exit 1
+    fi
+    echo "    asset ${ASSET_NAME} (${UPLOADED_SIZE} bytes) uploaded"
 fi
 
 echo

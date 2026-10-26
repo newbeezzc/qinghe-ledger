@@ -20,11 +20,13 @@
 
 更多截图见 `docs/screenshots/`（账户管理、分类管理、转账页面、悬浮记账卡片）。
 
-## 当前验证状态（2026-10-26，v1.0.9）
+## 当前验证状态（2026-10-26，v1.0.10）
 
 - **release APK 约 2.7 MB**（debug 约 21 MB），最低 Android 8.0。
 - 解析器单元测试 **17/17**、更新版本比较测试 **4/4**，共 **21/21 通过**。
 - 已在 Android 15（API 35）模拟器上安装运行；手动记账、编辑、长按删除、转账、预算、统计均验证通过。
+- v1.0.10 新增：
+  - **更新下载更稳**：优先走 GitHub API 附件通道（`api.github.com` → `release-assets.githubusercontent.com`），失败时自动回退 `github.com` 原下载地址；实测本机无法直连 `github.com` 时仍可下载。
 - v1.0.9 新增：
   - **内置更新源**：默认 `newbeezzc/qinghe-ledger`，装好后点「检查更新」即可，无需手填仓库；每日自动检查仍然默认开启。
   - 发布脚本升级：clean 构建、自动更新 README 版本与 SHA-256、自动 commit/push、创建带 APK 附件的 Release（不再强制依赖 `gh`）。
@@ -40,7 +42,7 @@
   - `LazyColumn` 使用稳定 key 与 `contentType`，行组件只接收预计算字段；
   - 青禾界面在前台时暂停无障碍树扫描，避免后台扫描和列表滚动抢主线程；
   - 缓存 `DateTimeFormatter` 与分类颜色，减少重复分配；
-  - 继续使用 R8 minify/shrink 的 release 构建（2.7 MB），版本标签显示 `v1.0.9 · release`；
+  - 继续使用 R8 minify/shrink 的 release 构建（2.7 MB），版本标签显示 `v1.0.10 · release`；
   - 实测 release：微信账单详情页 → 悬浮卡片「餐饮-咖啡 ¥26.60」；300 条账目压力滚动无崩溃；
   - v1.0.6 的“收窄事件”方案已回滚，避免再次影响识别。
 - v1.0.5 验证：
@@ -110,7 +112,7 @@
 构建产物（推荐使用版本化文件）：
 
 ```
-dist/qinghe-1.0.9.apk
+dist/qinghe-1.0.10.apk
 ```
 
 也可以使用：
@@ -122,16 +124,16 @@ app/build/outputs/apk/debug/app-debug.apk
 把 APK 传到 Android 手机上安装（需允许「安装未知来源应用」）。也可以连接手机后执行：
 
 ```bash
-adb install -r dist/qinghe-1.0.9.apk
+adb install -r dist/qinghe-1.0.10.apk
 ```
 
 当前 APK 的 SHA-256：
 
 ```
-7854c80ab85884aef5c90af82d634bf4bf900827568230a21825daef97521b72
+e0341e0ae3ac281d891dbac6394dc1fb657354edd53cd1e1805fb20177a1c9e9
 ```
 
-安装后在「我的」标题旁可以看到 `v1.0.9 · release`（如果是 `debug`，说明装错了包），用于确认版本已更新。
+安装后在「我的」标题旁可以看到 `v1.0.10 · release`（如果是 `debug`，说明装错了包），用于确认版本已更新。
 
 > 这是 R8 优化的 release 包，但使用本机 debug keystore 签名，适合自己安装体验；正式分发请替换为自己的 release 签名。
 

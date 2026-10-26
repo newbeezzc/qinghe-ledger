@@ -81,6 +81,7 @@ Single-module, single-activity Compose app. Manual DI: `QingheApp` creates `di/A
 ### GitHub updater
 
 - `update/UpdateManager.kt` checks `https://api.github.com/repos/<repo>/releases/latest`, requires a tag `vX.Y.Z`, picks an `.apk` asset, compares versions, downloads, and validates package name, higher `versionCode`, non-debuggable, and certificate match with the installed app.
+- Downloads try the asset API URL (`api.github.com/.../releases/assets/<id>`, `Accept: application/octet-stream`) first, then fall back to `browser_download_url`; `github.com` release downloads are unreliable on mainland networks while the API/CDN hosts usually work.
 - `INTERNET` is only for update checks/downloads. No ledger/notification/screen text is uploaded.
 - The updater validates the signing certificate, so **future APKs must be signed with the same key**. Release builds currently use `signingConfigs.getByName("debug")`. Do not switch signing keys without warning the user that an uninstall (data loss) is required.
 - New permissions/paths: `REQUEST_INSTALL_PACKAGES`, `FileProvider` authority `${applicationId}.fileprovider`, `res/xml/file_paths.xml` maps `cache/updates`.
