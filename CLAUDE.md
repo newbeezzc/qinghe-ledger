@@ -68,7 +68,8 @@ Single-module, single-activity Compose app. Manual DI: `QingheApp` creates `di/A
 - `util/AppVisibility` is set by `MainActivity`; the accessibility service skips scans while the bookkeeping UI is foreground to avoid competing with list rendering.
 - `AutoRecorder` holds a `Mutex` around duplicate-check + insert. Dedup checks both recent `createdAt` (90 s) and payment `occurredAt` (±120 s), so the notification and accessibility paths cannot double-record the same payment, and reopening an old bill does not duplicate it.
 - For auto records, `note` is the merchant (or empty), `occurredAt` is the parsed payment time / notification `postTime`, and the category is resolved through auto-rules plus `subcategoryHints`. If the user edits an auto record's category, the repository learns/updates a keyword rule from merchant (or note).
-- `AutoRecordOverlay` shows the bottom system overlay and its 修改 / 取消记账 buttons; it requires `SYSTEM_ALERT_WINDOW` and falls back to the high-priority notification when the permission is missing or `addView` fails. The card auto-dismisses after 3 s. 取消记账 calls `LedgerRepository.deleteAutoTransaction` (manual rows are protected). The edit intent is passed through `MainActivity` (`EXTRA_EDIT_TRANSACTION_ID`) into `LedgerRoot`.
+- `AutoRecordOverlay` shows the bottom system overlay and its 修改 / 取消记账 buttons; it requires `SYSTEM_ALERT_WINDOW` and falls back to the high-priority notification when the permission is missing or `addView` fails. The card auto-dismisses after 5 s. 取消记账 calls `LedgerRepository.deleteAutoTransaction` (manual rows are protected). The edit intent is passed through `MainActivity` (`EXTRA_EDIT_TRANSACTION_ID`) into `LedgerRoot`.
+- `data/AutoCategoryClassifier.kt` (pure Kotlin) resolves the category for every auto record: user rules first (user rules beat built-ins, longest keyword wins), then specific merchant/product keywords, then platform keywords (美团/淘宝/…), then meal time for 餐饮, then the parent's 其他 child. It always tries to land on a subcategory. Add new merchant keywords there and extend `AutoCategoryClassifierTest`.
 - Both capture paths go through `AutoRecorder.handle`, so every auto record attempts the overlay — do not add a second insert path that bypasses it.
 
 ### UI
@@ -93,12 +94,13 @@ Single-module, single-activity Compose app. Manual DI: `QingheApp` creates `di/A
 
 - `app/src/test/java/com/qinghe/ledger/auto/PaymentParserTest.kt` — notification/screen parsing, false positives, timestamps, categories/notes.
 - `app/src/test/java/com/qinghe/ledger/update/UpdateVersionTest.kt` — semver comparison.
-- Current expected total: 35 tests (28 parser + 4 updater + 3 category ordering).
+- Current expected total: 47 tests (28 parser + 12 classifier + 4 updater + 3 category ordering).
 
 ## Invariants / gotchas
 
 - **Keep every project artifact inside the repository.** Never write release notes, APKs, tokens, credentials, or test downloads to `%TEMP%` or anywhere else on C:. Use `docs/release-notes/vX.Y.Z.md` for release notes (the publish script reads it automatically), `dist/archive/` for old APKs, and `local-temp/` for transient helpers — the last two are git-ignored. Credentials stay in `.github-token` and `.git-credentials` at the repo root and are git-ignored.
 - Do not add OCR; the accessibility extraction is intentionally non-OCR.
+- Do not put release notes, "what's new" text, or version-changelog cards into app screens. In-app help text should describe current behavior only; release notes belong in `docs/release-notes/` and the GitHub Release.
 - Do not narrow accessibility event types to only window events; WeChat bill recognition regressed when that was done.
 - Do not put raw screen text into auto-record notes; notes must remain merchant/empty.
 - Keep category seeding idempotent; new built-in subcategories must be added there so existing users receive them.

@@ -49,7 +49,6 @@ import androidx.compose.ui.unit.sp
 import com.qinghe.ledger.data.local.CategoryEntity
 import com.qinghe.ledger.data.model.TransactionType
 import com.qinghe.ledger.ui.components.CategoryBadge
-import com.qinghe.ledger.ui.components.InfoCard
 import com.qinghe.ledger.ui.components.ManagerTopBar
 import com.qinghe.ledger.ui.components.PillSelector
 
@@ -182,14 +181,6 @@ fun CategoryManagerScreen(
                             }
                         }
                     }
-                }
-                item(key = "categories-tip") {
-                    InfoCard(
-                        emoji = "🏷️",
-                        title = "大类与小类",
-                        message = "新版支持“大类-小类”两级分类，明细标题会显示为例如“餐饮-咖啡”。已有账目使用或含小类的分类不能删除。",
-                        modifier = Modifier.padding(top = 10.dp)
-                    )
                 }
             }
         }

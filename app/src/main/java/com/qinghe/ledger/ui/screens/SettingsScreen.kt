@@ -127,7 +127,7 @@ fun SettingsScreen(
             InfoCard(
                 emoji = "🔒",
                 title = "数据只在本机",
-                message = "账单只保存在这台手机上。联网仅用于检查/下载你配置的 GitHub 更新，不会上传账单或记账内容。"
+                message = "账单只保存在这台手机上。联网仅用于检查/下载内置或你自定义的 GitHub 更新，不会上传账单或记账内容。"
             )
         }
 
@@ -224,7 +224,7 @@ fun SettingsScreen(
             NavRow(
                 emoji = "⚙️",
                 title = "自动分类规则",
-                subtitle = "按商户关键词自动归类",
+                subtitle = "按商户/商品智能归入小类",
                 onClick = onOpenRules
             )
         }

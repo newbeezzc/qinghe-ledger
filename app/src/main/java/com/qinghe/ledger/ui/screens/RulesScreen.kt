@@ -80,7 +80,7 @@ fun RulesScreen(
                     InfoCard(
                         emoji = "⚙️",
                         title = "按关键词自动归类",
-                        message = "自动记账时，会用商户名和通知内容匹配关键词，命中后归入对应分类；没有命中则归入「其他」。"
+                        message = "自动记账时会先匹配你保存的规则，再根据商户名、商品说明和常见平台关键词自动选择小类；判断不了才归入「其他」。"
                     )
                 }
                 items(rules, key = { it.id }) { rule ->

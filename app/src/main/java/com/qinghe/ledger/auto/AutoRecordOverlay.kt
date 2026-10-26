@@ -29,7 +29,7 @@ import com.qinghe.ledger.util.formatDateTime
  * high-priority notification when the permission is missing.
  */
 object AutoRecordOverlay {
-    private const val AUTO_DISMISS_MS = 3_000L
+    private const val AUTO_DISMISS_MS = 5_000L
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private var overlayView: View? = null

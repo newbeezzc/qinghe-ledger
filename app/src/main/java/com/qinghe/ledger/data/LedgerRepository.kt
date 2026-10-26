@@ -333,37 +333,14 @@ class LedgerRepository(private val db: AppDatabase) {
         }
         val categories = categoryDao.getAll()
         val categoryById = categories.associateBy { it.id }
-        val typeCategories = categories.filter { it.type == type.name }
-        val topLevel = typeCategories.filter { it.parentId == null }
-        val haystack = "${parsed.merchant.orEmpty()} ${parsed.rawText}"
-
-        fun resolveSubcategory(base: CategoryEntity): CategoryEntity {
-            if (base.parentId != null) return base
-            val children = typeCategories.filter { it.parentId == base.id }
-            if (children.isEmpty()) return base
-            val byHint = children.firstOrNull { child ->
-                subcategoryHints[child.name]?.any { hint -> haystack.contains(hint) } == true
-            }
-            val byName = children.firstOrNull { haystack.contains(it.name) }
-            return byHint
-                ?: byName
-                ?: children.firstOrNull { it.name == "其他" }
-                ?: base
-        }
-
-        val matchedCategory = ruleDao.getAll()
-            .asSequence()
-            .mapNotNull { rule ->
-                val base = categoryById[rule.categoryId] ?: return@mapNotNull null
-                if (base.type != type.name) return@mapNotNull null
-                if (!haystack.contains(rule.keyword)) return@mapNotNull null
-                resolveSubcategory(base)
-            }
-            .firstOrNull()
-
-        val category = matchedCategory
-            ?: topLevel.firstOrNull { it.name == "其他" }
-            ?: topLevel.firstOrNull()
+        val category = AutoCategoryClassifier.classify(
+            type = type,
+            merchant = parsed.merchant,
+            rawText = parsed.rawText,
+            occurredAtMillis = occurredAt,
+            categories = categories,
+            rules = ruleDao.getAll()
+        )?.category
 
         val categoryPath = category?.let { item ->
             val parent = item.parentId?.let { categoryById[it] }
@@ -554,51 +531,6 @@ class LedgerRepository(private val db: AppDatabase) {
         private val categoryPalette = listOf(
             "#E07A5F", "#4A7BD0", "#B07CC6", "#81B29A", "#D9A441",
             "#D05C6B", "#4D908E", "#577590", "#8D99AE"
-        )
-        private val subcategoryHints = mapOf(
-            "早餐" to listOf("早餐", "包子", "豆浆"),
-            "午餐" to listOf("午餐", "午饭"),
-            "晚餐" to listOf("晚餐", "晚饭"),
-            "酒水饮料" to listOf(
-                "酒水", "饮料", "奶茶", "果汁", "可乐", "矿泉水", "咖啡",
-                "瑞幸", "星巴克", "蜜雪冰城", "茶饮"
-            ),
-            "零食" to listOf("零食", "小吃"),
-            "一卡通" to listOf("一卡通", "校园卡", "饭卡"),
-            "公交地铁" to listOf("地铁", "公交", "轨道交通"),
-            "打车" to listOf("打车", "滴滴", "出租", "高德"),
-            "电动车" to listOf("电动车", "电瓶车", "小电驴"),
-            "加油" to listOf("加油", "中石化", "中石油"),
-            "停车" to listOf("停车"),
-            "火车高铁" to listOf("火车", "高铁", "12306"),
-            "日用" to listOf("超市", "便利店", "日用"),
-            "服饰" to listOf("服饰", "服装", "鞋"),
-            "数码" to listOf("数码", "电脑", "手机"),
-            "美妆" to listOf("美妆", "化妆", "护肤"),
-            "房租" to listOf("房租", "租金"),
-            "水电" to listOf("水费", "电费", "燃气", "水电"),
-            "物业" to listOf("物业"),
-            "家居" to listOf("家居", "家具"),
-            "电影" to listOf("电影", "影院"),
-            "游戏" to listOf("游戏", "Steam", "王者"),
-            "旅行" to listOf("旅行", "酒店", "机票"),
-            "运动" to listOf("健身", "运动"),
-            "药品" to listOf("药房", "药店", "药品"),
-            "门诊" to listOf("医院", "门诊", "挂号"),
-            "体检" to listOf("体检"),
-            "书籍" to listOf("书店", "书籍", "买书"),
-            "课程" to listOf("课程", "学费", "培训"),
-            "云服务" to listOf("云服务", "云盘", "iCloud", "阿里云", "腾讯云", "百度网盘"),
-            "文具" to listOf("文具"),
-            "红包" to listOf("红包"),
-            "礼物" to listOf("礼物"),
-            "请客" to listOf("请客", "聚餐"),
-            "亲属卡" to listOf("亲属卡"),
-            "话费" to listOf("话费", "充值"),
-            "流量" to listOf("流量"),
-            "宽带" to listOf("宽带"),
-            "利息" to listOf("利息"),
-            "投资收益" to listOf("收益", "理财")
         )
     }
 }
