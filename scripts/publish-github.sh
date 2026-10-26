@@ -79,6 +79,8 @@ git push origin HEAD
 echo "==> Publishing GitHub Release v${VERSION}"
 if [[ -n "${RELEASE_NOTES_FILE:-}" && -f "$RELEASE_NOTES_FILE" ]]; then
     NOTES="$(cat "$RELEASE_NOTES_FILE")"
+elif [[ -f "$ROOT/docs/release-notes/v${VERSION}.md" ]]; then
+    NOTES="$(cat "$ROOT/docs/release-notes/v${VERSION}.md")"
 else
     NOTES="${RELEASE_NOTES:-青禾记账 v${VERSION}}"
 fi

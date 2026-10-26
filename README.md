@@ -162,7 +162,7 @@ v1.0.9 起**内置更新源** `newbeezzc/qinghe-ledger`，装好后不需要填�
 bash scripts/publish-github.sh            # 默认发布到 newbeezzc/qinghe-ledger
 ```
 
-脚本会 clean 构建 release APK、同步 README 的版本号与 SHA-256、**自动 commit 并 push**，最后创建带 APK 附件的 GitHub Release。没有安装 `gh` 时，会依次使用 `GITHUB_TOKEN`、`GH_TOKEN` 或本地 `.github-token` 文件（已在 `.gitignore` 中，不会提交）。
+脚本会 clean 构建 release APK、同步 README 的版本号与 SHA-256、**自动 commit 并 push**，最后创建带 APK 附件的 GitHub Release；发布说明优先读取 `docs/release-notes/vX.Y.Z.md`。没有安装 `gh` 时，会依次使用 `GITHUB_TOKEN`、`GH_TOKEN` 或本地 `.github-token` 文件（已在 `.gitignore` 中，不会提交）。
 
 想换成自己的仓库：修改 `SettingsRepository.kt` 里的 `DEFAULT_GITHUB_REPO`，或仍在「我的 → GitHub 更新源」里覆盖。
 

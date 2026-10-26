@@ -97,6 +97,7 @@ Single-module, single-activity Compose app. Manual DI: `QingheApp` creates `di/A
 
 ## Invariants / gotchas
 
+- **Keep every project artifact inside the repository.** Never write release notes, APKs, tokens, credentials, or test downloads to `%TEMP%` or anywhere else on C:. Use `docs/release-notes/vX.Y.Z.md` for release notes (the publish script reads it automatically), `dist/archive/` for old APKs, and `local-temp/` for transient helpers — the last two are git-ignored. Credentials stay in `.github-token` and `.git-credentials` at the repo root and are git-ignored.
 - Do not add OCR; the accessibility extraction is intentionally non-OCR.
 - Do not narrow accessibility event types to only window events; WeChat bill recognition regressed when that was done.
 - Do not put raw screen text into auto-record notes; notes must remain merchant/empty.
