@@ -108,11 +108,18 @@ PY
         echo "Failed to create or find the release." >&2
         exit 1
     fi
-    curl -sS -X POST -H "Authorization: Bearer $TOKEN" \
+    UPLOAD_JSON="$(mktemp)"
+    if ! curl -sS --fail-with-body -o "$UPLOAD_JSON" -X POST -H "Authorization: Bearer $TOKEN" \
         -H "Accept: application/vnd.github+json" \
-        -H "Content-Type: application/vnd.android.package-archive" \
+        -H "Content-Type: application/octet-stream" \
         --data-binary "@${APK}" \
-        "$API/releases/${RELEASE_ID}/assets?name=$(basename "$APK")" >/dev/null
+        "$API/releases/${RELEASE_ID}/assets?name=$(basename "$APK")"; then
+        echo "Asset upload failed:" >&2
+        cat "$UPLOAD_JSON" >&2
+        rm -f "$UPLOAD_JSON"
+        exit 1
+    fi
+    rm -f "$UPLOAD_JSON"
 fi
 
 echo

@@ -128,7 +128,7 @@ adb install -r dist/qinghe-1.0.9.apk
 当前 APK 的 SHA-256：
 
 ```
-1692280edc0ed7289f5afbb96f2f46e9dc46e39d7171fa4d074e80ca9d2b74e7
+7854c80ab85884aef5c90af82d634bf4bf900827568230a21825daef97521b72
 ```
 
 安装后在「我的」标题旁可以看到 `v1.0.9 · release`（如果是 `debug`，说明装错了包），用于确认版本已更新。
