@@ -16,6 +16,10 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
+/** Stable subcategory order: normal rows by sortOrder, then 其他 last. */
+internal fun List<CategoryEntity>.sortedKeepingOtherLast(): List<CategoryEntity> =
+    sortedWith(compareBy({ it.name == "其他" }, { it.sortOrder }, { it.id }))
+
 data class AutoRecordResult(
     val transactionId: Long,
     val amountCents: Long,
@@ -106,6 +110,45 @@ class LedgerRepository(private val db: AppDatabase) {
                 )
             )
         }
+        migrateRetiredMealSubcategories()
+        ensureOtherLast()
+    }
+
+    /**
+     * Retires 餐饮-外卖 and 餐饮-咖啡 in favour of 酒水饮料. References are moved
+     * (咖啡 → 酒水饮料, 外卖 → 其他) before deletion so no transaction or learned
+     * rule is left pointing at a missing category. Idempotent.
+     */
+    private suspend fun migrateRetiredMealSubcategories() {
+        val all = categoryDao.getAll()
+        val meal = all.firstOrNull {
+            it.parentId == null && it.name == "餐饮" && it.type == TransactionType.EXPENSE.name
+        } ?: return
+        val children = all.filter { it.parentId == meal.id }
+        val other = children.firstOrNull { it.name == "其他" } ?: return
+        val drinks = children.firstOrNull { it.name == "酒水饮料" } ?: return
+        children
+            .filter { it.builtIn && (it.name == "外卖" || it.name == "咖啡") }
+            .forEach { retired ->
+                val target = if (retired.name == "咖啡") drinks else other
+                transactionDao.reassignCategory(retired.id, target.id)
+                ruleDao.reassignCategory(retired.id, target.id)
+                categoryDao.delete(retired)
+            }
+    }
+
+    /** Keeps 其他 at the end of every subcategory group after additions/deletions. */
+    private suspend fun ensureOtherLast() {
+        categoryDao.getAll()
+            .filter { it.parentId != null }
+            .groupBy { it.parentId }
+            .forEach { (_, children) ->
+                children.sortedKeepingOtherLast().forEachIndexed { index, child ->
+                    if (child.sortOrder != index) {
+                        categoryDao.update(child.copy(sortOrder = index))
+                    }
+                }
+            }
     }
 
     suspend fun addTransaction(transaction: TransactionEntity): Long =
@@ -166,7 +209,7 @@ class LedgerRepository(private val db: AppDatabase) {
         } else {
             topLevelCount
         }
-        return categoryDao.insert(
+        val id = categoryDao.insert(
             CategoryEntity(
                 name = name.trim(),
                 emoji = emoji,
@@ -176,15 +219,21 @@ class LedgerRepository(private val db: AppDatabase) {
                 parentId = parent?.id
             )
         )
+        ensureOtherLast()
+        return id
     }
 
-    suspend fun updateCategory(category: CategoryEntity) = categoryDao.update(category)
+    suspend fun updateCategory(category: CategoryEntity) {
+        categoryDao.update(category)
+        ensureOtherLast()
+    }
 
     suspend fun deleteCategory(category: CategoryEntity): Boolean {
         if (category.builtIn) return false
         if (categoryDao.countChildren(category.id) > 0) return false
         if (transactionDao.countForCategory(category.id) > 0) return false
         categoryDao.delete(category)
+        ensureOtherLast()
         return true
     }
 
@@ -387,10 +436,9 @@ class LedgerRepository(private val db: AppDatabase) {
         CategorySeed("早餐", "🥐", TransactionType.EXPENSE, "#E07A5F", "餐饮"),
         CategorySeed("午餐", "🍱", TransactionType.EXPENSE, "#E07A5F", "餐饮"),
         CategorySeed("晚餐", "🍲", TransactionType.EXPENSE, "#E07A5F", "餐饮"),
-        CategorySeed("外卖", "🥡", TransactionType.EXPENSE, "#E07A5F", "餐饮"),
-        CategorySeed("咖啡", "☕", TransactionType.EXPENSE, "#E07A5F", "餐饮"),
         CategorySeed("零食", "🍪", TransactionType.EXPENSE, "#E07A5F", "餐饮"),
         CategorySeed("一卡通", "🎫", TransactionType.EXPENSE, "#E07A5F", "餐饮"),
+        CategorySeed("酒水饮料", "🍹", TransactionType.EXPENSE, "#E07A5F", "餐饮"),
         CategorySeed("其他", "🍴", TransactionType.EXPENSE, "#E07A5F", "餐饮"),
         CategorySeed("公交地铁", "🚇", TransactionType.EXPENSE, "#4A7BD0", "交通"),
         CategorySeed("打车", "🚕", TransactionType.EXPENSE, "#4A7BD0", "交通"),
@@ -511,8 +559,10 @@ class LedgerRepository(private val db: AppDatabase) {
             "早餐" to listOf("早餐", "包子", "豆浆"),
             "午餐" to listOf("午餐", "午饭"),
             "晚餐" to listOf("晚餐", "晚饭"),
-            "外卖" to listOf("外卖", "美团", "饿了么", "肯德基", "麦当劳"),
-            "咖啡" to listOf("咖啡", "瑞幸", "星巴克", "奶茶", "蜜雪冰城"),
+            "酒水饮料" to listOf(
+                "酒水", "饮料", "奶茶", "果汁", "可乐", "矿泉水", "咖啡",
+                "瑞幸", "星巴克", "蜜雪冰城", "茶饮"
+            ),
             "零食" to listOf("零食", "小吃"),
             "一卡通" to listOf("一卡通", "校园卡", "饭卡"),
             "公交地铁" to listOf("地铁", "公交", "轨道交通"),

@@ -233,6 +233,85 @@ class PaymentParserTest {
     }
 
     @Test
+    fun `received transfer with payment method is parsed as income`() {
+        val result = PaymentParser.fromScreen(
+            PaymentParser.WECHAT_PACKAGE,
+            "转账成功 收款方 张三 付款方式 零钱 已到账 50.00 交易单号 12345"
+        )
+        requireNotNull(result)
+        assertEquals(PaymentType.INCOME, result.type)
+        assertEquals(5000L, result.amountCents)
+    }
+
+    @Test
+    fun `signed income amount is parsed as income`() {
+        val result = PaymentParser.fromScreen(
+            PaymentParser.ALIPAY_PACKAGE,
+            "账单详情 +100.00 收款方 张三 付款方式 余额宝 交易单号 2026102012345"
+        )
+        requireNotNull(result)
+        assertEquals(PaymentType.INCOME, result.type)
+        assertEquals(10000L, result.amountCents)
+    }
+
+    @Test
+    fun `signed expense amount stays expense`() {
+        val result = PaymentParser.fromScreen(
+            PaymentParser.WECHAT_PACKAGE,
+            "账单详情 -18.00 商户全称 瑞幸咖啡 支付方式 零钱 交易单号 4200001234"
+        )
+        requireNotNull(result)
+        assertEquals(PaymentType.EXPENSE, result.type)
+        assertEquals(1800L, result.amountCents)
+    }
+
+    @Test
+    fun `alipay money received notification is income`() {
+        val result = PaymentParser.fromNotification(
+            PaymentParser.ALIPAY_PACKAGE,
+            "支付宝",
+            "你已收到一笔钱 8.80元"
+        )
+        requireNotNull(result)
+        assertEquals(PaymentType.INCOME, result.type)
+        assertEquals(880L, result.amountCents)
+    }
+
+    @Test
+    fun `wechat collection notification is income`() {
+        val result = PaymentParser.fromNotification(
+            PaymentParser.WECHAT_PACKAGE,
+            "微信支付",
+            "微信支付收款0.50元"
+        )
+        requireNotNull(result)
+        assertEquals(PaymentType.INCOME, result.type)
+        assertEquals(50L, result.amountCents)
+    }
+
+    @Test
+    fun `income page with payer label is income`() {
+        val result = PaymentParser.fromScreen(
+            PaymentParser.WECHAT_PACKAGE,
+            "转账成功 付款方 李四 收款账户 零钱 已到账 50.00 交易单号 12345"
+        )
+        requireNotNull(result)
+        assertEquals(PaymentType.INCOME, result.type)
+        assertEquals(5000L, result.amountCents)
+    }
+
+    @Test
+    fun `sent transfer page stays expense`() {
+        val result = PaymentParser.fromScreen(
+            PaymentParser.ALIPAY_PACKAGE,
+            "转账成功 收款方 张三 付款账户 余额宝 50.00 交易单号 12345"
+        )
+        requireNotNull(result)
+        assertEquals(PaymentType.EXPENSE, result.type)
+        assertEquals(5000L, result.amountCents)
+    }
+
+    @Test
     fun `comma separated amount is parsed`() {
         val result = PaymentParser.fromNotification(
             PaymentParser.ALIPAY_PACKAGE,

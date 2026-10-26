@@ -63,8 +63,9 @@ object PaymentParser {
     )
 
     private val incomeWords = listOf(
-        "收款成功", "已收款", "收款到账", "到账", "收入", "退款", "退回",
-        "入账", "红包已领取", "收到转账"
+        "收款成功", "已收款", "收款到账", "收到转账", "收到一笔", "收到红包",
+        "已存入零钱", "存入零钱", "到账", "入账", "红包已领取",
+        "收入", "退款", "退回"
     )
     private val expenseWords = listOf(
         "支付成功", "付款成功", "支付完成", "付款完成", "已支付", "支付了",
@@ -160,7 +161,8 @@ object PaymentParser {
     ): ParseResult {
         val candidateWords = incomeWords + expenseWords +
             (if (requireScreenIndicators) screenPaymentWords else emptyList())
-        val hasPaymentWord = candidateWords.any { combined.contains(it) }
+        val hasPaymentWord = candidateWords.any { combined.contains(it) } ||
+            receivedAmount.containsMatchIn(combined)
         if (!hasPaymentWord) {
             return ParseResult(null, "未发现支付关键词")
         }
@@ -228,8 +230,39 @@ object PaymentParser {
         }
 
     private fun detectType(text: String): PaymentType? {
-        if (incomeWords.any { text.contains(it) }) return PaymentType.INCOME
-        if (expenseWords.any { text.contains(it) }) return PaymentType.EXPENSE
+        // An explicit +/- sign on the amount is the strongest signal.
+        signedAmountType(text)?.let { return it }
+
+        // "收款方", "付款方式" and "支付方式" are field labels that appear on
+        // both income and expense pages. Strip them before keyword matching so
+        // an income page is not mistaken for an expense because it says "付款方式".
+        val neutral = text
+            .replace("收款方", "")
+            .replace("收款账户", "")
+            .replace("收款机构", "")
+            .replace("付款方", "")
+            .replace("付款账户", "")
+            .replace("付款方式", "")
+            .replace("支付方式", "")
+        if (incomeWords.any { neutral.contains(it) }) return PaymentType.INCOME
+        if (receivedAmount.containsMatchIn(neutral)) return PaymentType.INCOME
+        if (expenseWords.any { neutral.contains(it) }) return PaymentType.EXPENSE
+        return null
+    }
+
+    // "微信支付收款0.50元" / "收款 ¥50.00" — but not "收款账户 张三".
+    private val receivedAmount = Regex("""收款\s*[¥￥]?\s*[0-9]""")
+
+    private val signedIncome = Regex(
+        """(?:\+\s*[¥￥]\s*[0-9]{1,7}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?|\+\s*[0-9]{1,7}(?:,[0-9]{3})*\.[0-9]{2}(?![0-9]))"""
+    )
+    private val signedExpense = Regex(
+        """(?:[-−]\s*[¥￥]\s*[0-9]{1,7}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?|[-−]\s*[0-9]{1,7}(?:,[0-9]{3})*\.[0-9]{2}(?![0-9]))"""
+    )
+
+    private fun signedAmountType(text: String): PaymentType? {
+        if (signedIncome.containsMatchIn(text)) return PaymentType.INCOME
+        if (signedExpense.containsMatchIn(text)) return PaymentType.EXPENSE
         return null
     }
 

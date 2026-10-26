@@ -418,8 +418,11 @@ fun AddTransactionScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(Modifier.height(4.dp))
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(subcategories, key = { it.id }) { child ->
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            subcategories.forEach { child ->
                                 FilterChip(
                                     selected = child.id == categoryId,
                                     onClick = { categoryId = child.id },

@@ -54,13 +54,35 @@ import com.qinghe.ledger.ui.components.ManagerTopBar
 import com.qinghe.ledger.ui.components.PillSelector
 
 private val emojiChoices = listOf(
-    "🍜", "🍚", "🍔", "🍕", "🍣", "🍰", "☕", "🍺",
-    "🛒", "🛍️", "👕", "👟", "💄", "🎁", "🎮", "🎬",
-    "🎵", "✈️", "🚌", "🚗", "⛽", "🚲", "🏠", "💡",
-    "💧", "🔥", "📱", "💻", "📚", "✏️", "💊", "🏥",
-    "🐶", "🌱", "🎓", "💼", "💰", "🏅", "📈", "🧧",
-    "💵", "❤️", "🎉", "🔧", "📦", "🧾"
-)
+    // 餐饮 / 饮品
+    "🍜", "🍚", "🍔", "🍕", "🍣", "🍱", "🍲", "🥐", "🍞", "🥗",
+    "🍰", "🍦", "🍫", "🍬", "🍪", "🥡", "🍎", "🍉", "🍇", "🍓",
+    "☕", "🧋", "🍵", "🥤", "🧃", "🥛", "🍺", "🍷", "🥂", "🍹",
+    // 购物 / 服饰
+    "🛒", "🛍️", "👕", "👖", "👗", "👟", "👠", "👜", "👛", "🧢",
+    "💄", "🧴", "💍", "🎁", "🧸", "👓", "⌚", "💎",
+    // 交通 / 出行
+    "🚌", "🚇", "🚕", "🚗", "🚙", "🚲", "🛵", "🏍️", "🚄", "🚂",
+    "✈️", "🚢", "⛽", "🅿️", "🧭", "🗺️", "🎒",
+    // 居住 / 生活
+    "🏠", "🏢", "🛋️", "🛏️", "🪑", "💡", "💧", "🔥", "🪴", "🧹",
+    "🧺", "🧼", "🪥", "🧻", "🔑", "🔒", "🚿", "🛠️",
+    // 数码 / 通讯
+    "📱", "💻", "🖥️", "⌨️", "🖱️", "🎧", "📷", "🔋", "💾", "📶",
+    "🌐", "📡",
+    // 娱乐 / 运动
+    "🎮", "🎬", "🎵", "🎤", "🎫", "🎳", "🎯", "🎲", "♟️", "🏀",
+    "⚽", "🏸", "🏊", "🏃", "🚴", "🎣",
+    // 医疗 / 健康
+    "💊", "🏥", "🩺", "🦷", "💉", "🩹", "🧘", "🏋️",
+    // 学习 / 工作
+    "📚", "📖", "✏️", "🖊️", "📝", "🎓", "💼", "📊", "🧾", "📦",
+    // 收入 / 理财
+    "💰", "💵", "💳", "🪙", "🏦", "📈", "💹", "🧧",
+    // 宠物 / 自然 / 其他
+    "🐶", "🐱", "🐟", "🌱", "🌸", "🌳", "🍀", "☀️", "🌙", "❤️",
+    "🎉", "🎊", "🎂", "🏅", "🔧", "⚙️", "🗑️"
+).distinct()
 
 @Composable
 fun CategoryManagerScreen(
@@ -229,7 +251,9 @@ private fun CategoryDialog(
     onSave: (String, String, Long?) -> Unit
 ) {
     var name by remember(category) { mutableStateOf(category?.name.orEmpty()) }
-    var emoji by remember(category) { mutableStateOf(category?.emoji ?: "🍜") }
+    var emoji by remember(category) {
+        mutableStateOf(category?.emoji ?: if (type == TransactionType.INCOME) "💰" else "🍜")
+    }
     var parentId by remember(category) { mutableStateOf(category?.parentId) }
     val parent = parents.firstOrNull { it.id == parentId }
 
@@ -297,7 +321,7 @@ private fun CategoryDialog(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 188.dp)
+                        .heightIn(max = 260.dp)
                         .verticalScroll(rememberScrollState())
                 ) {
                     FlowRow(

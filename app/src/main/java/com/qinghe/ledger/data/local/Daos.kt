@@ -110,6 +110,9 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions WHERE id = :id")
     suspend fun findById(id: Long): TransactionEntity?
 
+    @Query("UPDATE transactions SET categoryId = :toCategoryId WHERE categoryId = :fromCategoryId")
+    suspend fun reassignCategory(fromCategoryId: Long, toCategoryId: Long)
+
     @Query(
         """
         SELECT * FROM transactions
@@ -175,6 +178,9 @@ interface AutoRuleDao {
 
     @Query("SELECT * FROM auto_rules WHERE keyword = :keyword LIMIT 1")
     suspend fun findByKeyword(keyword: String): AutoRuleEntity?
+
+    @Query("UPDATE auto_rules SET categoryId = :toCategoryId WHERE categoryId = :fromCategoryId")
+    suspend fun reassignCategory(fromCategoryId: Long, toCategoryId: Long)
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(rule: AutoRuleEntity): Long

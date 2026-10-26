@@ -55,7 +55,7 @@ Single-module, single-activity Compose app. Manual DI: `QingheApp` creates `di/A
 
 - `data/local/Entities.kt` — Room entities. Money is always **Long cents**. Room DB is **version 2**; `MIGRATION_1_2` adds nullable `categories.parentId`. Never use destructive migration: user ledgers must survive upgrades.
 - `CategoryEntity.parentId == null` = top-level ("大类"); non-null = subcategory ("小类"). Transactions reference either level. Titles are rendered as `大类-小类`.
-- `LedgerRepository.seedDefaults()` runs on every app start, is idempotent, and must keep adding missing built-in categories/children for existing installs (this is how new subcategories reach old users).
+- `LedgerRepository.seedDefaults()` runs on every app start, is idempotent, and must keep adding missing built-in categories/children for existing installs (this is how new subcategories reach old users). It also runs `migrateRetiredMealSubcategories()`: built-in 餐饮-外卖 / 餐饮-咖啡 are removed and their transactions/rules are reassigned (咖啡 → 酒水饮料, 外卖 → 其他). `ensureOtherLast()` keeps 其他 at the end of every subcategory group after any add/update/delete; `sortedKeepingOtherLast()` is unit-tested.
 - `data/SettingsRepository.kt` — DataStore preferences: auto-capture toggles, GitHub update source, auto-check flag, last check timestamp. `DEFAULT_GITHUB_REPO` (`newbeezzc/qinghe-ledger`) is the built-in source; a blank stored value falls back to it, so users never need to type a repo.
 - `ui/LedgerViewModel.kt` — month selection, Room flows, CRUD, update-setting writes, and `learnCategoryRule` message.
 
@@ -63,7 +63,7 @@ Single-module, single-activity Compose app. Manual DI: `QingheApp` creates `di/A
 
 `PaymentNotificationListener` and `PaymentAccessibilityService` feed `PaymentParser` (pure Kotlin, JVM-testable), then `AutoRecorder`:
 
-- `PaymentParser.analyzeNotification` / `analyzeScreen` return `ParseResult(payment, reason)`. It parses amounts (¥/元/standalone), merchant, payment time, and rejects bill summaries/chats. A payment **success page** needs only the success title + amount + one context marker (完成/支付方式/零钱/…), while a bill detail page still needs two markers. Keep it free of Android APIs so `PaymentParserTest` works.
+- `PaymentParser.analyzeNotification` / `analyzeScreen` return `ParseResult(payment, reason)`. It parses amounts (¥/元/standalone), merchant, payment time, and rejects bill summaries/chats. A payment **success page** needs only the success title + amount + one context marker (完成/支付方式/零钱/…), while a bill detail page still needs two markers. Income vs expense: an explicit `+`/`-` amount sign wins, then keywords match after stripping the bidirectional field labels 收款方 / 付款方式 / 支付方式 (otherwise an income bill containing “付款方式” is misread as an expense). Keep it free of Android APIs so `PaymentParserTest` works.
 - `PaymentAccessibilityService` is intentionally layered (no OCR): DFS over `event.source`, active root and all interactive windows → `findAccessibilityNodeInfosByText` + parent backtracking → retries at 0/0.8/2/3.5 s. It listens to a broad event set (`typeAllMask`); narrowing events previously broke WeChat bill recognition.
 - `util/AppVisibility` is set by `MainActivity`; the accessibility service skips scans while the bookkeeping UI is foreground to avoid competing with list rendering.
 - `AutoRecorder` holds a `Mutex` around duplicate-check + insert. Dedup checks both recent `createdAt` (90 s) and payment `occurredAt` (±120 s), so the notification and accessibility paths cannot double-record the same payment, and reopening an old bill does not duplicate it.
@@ -75,7 +75,7 @@ Single-module, single-activity Compose app. Manual DI: `QingheApp` creates `di/A
 
 - `ui/LedgerRoot.kt` owns tabs, full-screen overlays (add/edit, accounts, categories, rules), update dialog, and the top-level snackbar.
 - `ui/screens/HomeScreen.kt` builds a precomputed, flat `HomeListItem` list (day headers + rows) in `remember`; scrolling must not do category lookups, string formatting, or color parsing per row. Keep this property when changing rows.
-- Add/edit screen supports two-level category selection and pre-selects the existing big/small category; be careful not to clear `categoryId` while `categories` is still loading from the DB (this caused an edit-from-overlay bug).
+- Add/edit screen supports two-level category selection and pre-selects the existing big/small category; subcategories are shown as a **multi-row FlowRow** (no horizontal scrolling). Be careful not to clear `categoryId` while `categories` is still loading from the DB (this caused an edit-from-overlay bug).
 - No Navigation library. Add screens? Prefer the existing overlay pattern. `AddTransactionScreen` is shared for new/edit.
 - Settings header displays `vVERSION · BUILD_TYPE`; keep it visible for APK debugging.
 
@@ -93,7 +93,7 @@ Single-module, single-activity Compose app. Manual DI: `QingheApp` creates `di/A
 
 - `app/src/test/java/com/qinghe/ledger/auto/PaymentParserTest.kt` — notification/screen parsing, false positives, timestamps, categories/notes.
 - `app/src/test/java/com/qinghe/ledger/update/UpdateVersionTest.kt` — semver comparison.
-- Current expected total: 25 tests (21 parser + 4 updater).
+- Current expected total: 35 tests (28 parser + 4 updater + 3 category ordering).
 
 ## Invariants / gotchas
 
