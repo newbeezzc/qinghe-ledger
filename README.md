@@ -73,21 +73,21 @@
 从 [GitHub Releases](https://github.com/newbeezzc/qinghe-ledger/releases/latest) 下载最新 APK：
 
 ```
-dist/qinghe-1.0.14.apk
+dist/qinghe-1.0.15.apk
 ```
 
 也可以连接手机后安装：
 
 ```bash
-adb install -r dist/qinghe-1.0.14.apk
+adb install -r dist/qinghe-1.0.15.apk
 ```
 
-安装后在「我的」标题旁可以看到 `v1.0.14 · release`（如果是 `debug`，说明装错了包）。
+安装后在「我的」标题旁可以看到 `v1.0.15 · release`（如果是 `debug`，说明装错了包）。
 
 当前 APK 的 SHA-256：
 
 ```
-602d2e3aa3696104087f67943103ecace9e3d485246f46c9c1a136e60807cde0
+e416adb5dd04249dd66af07720cb61898460df653dca951a95c85925a9ca9473
 ```
 
 ### 签名说明
