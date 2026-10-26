@@ -40,7 +40,7 @@
   - `LazyColumn` 使用稳定 key 与 `contentType`，行组件只接收预计算字段；
   - 青禾界面在前台时暂停无障碍树扫描，避免后台扫描和列表滚动抢主线程；
   - 缓存 `DateTimeFormatter` 与分类颜色，减少重复分配；
-  - 继续使用 R8 minify/shrink 的 release 构建（2.7 MB），版本标签显示 `v1.0.7 · release`；
+  - 继续使用 R8 minify/shrink 的 release 构建（2.7 MB），版本标签显示 `v1.0.9 · release`；
   - 实测 release：微信账单详情页 → 悬浮卡片「餐饮-咖啡 ¥26.60」；300 条账目压力滚动无崩溃；
   - v1.0.6 的“收窄事件”方案已回滚，避免再次影响识别。
 - v1.0.5 验证：
@@ -110,7 +110,7 @@
 构建产物（推荐使用版本化文件）：
 
 ```
-dist/qinghe-1.0.8.apk
+dist/qinghe-1.0.9.apk
 ```
 
 也可以使用：
@@ -122,16 +122,16 @@ app/build/outputs/apk/debug/app-debug.apk
 把 APK 传到 Android 手机上安装（需允许「安装未知来源应用」）。也可以连接手机后执行：
 
 ```bash
-adb install -r dist/qinghe-1.0.8.apk
+adb install -r dist/qinghe-1.0.9.apk
 ```
 
 当前 APK 的 SHA-256：
 
 ```
-908fbe6ee97af34ee2a16e7dda8846fc3392ecff7a27533c9633d7e21e28d848
+1692280edc0ed7289f5afbb96f2f46e9dc46e39d7171fa4d074e80ca9d2b74e7
 ```
 
-安装后在「我的」标题旁可以看到 `v1.0.8 · release`（如果是 `debug`，说明装错了包），用于确认版本已更新。
+安装后在「我的」标题旁可以看到 `v1.0.9 · release`（如果是 `debug`，说明装错了包），用于确认版本已更新。
 
 > 这是 R8 优化的 release 包，但使用本机 debug keystore 签名，适合自己安装体验；正式分发请替换为自己的 release 签名。
 

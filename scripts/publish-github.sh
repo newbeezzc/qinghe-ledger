@@ -33,12 +33,6 @@ if [[ -z "$VERSION" ]]; then
     exit 1
 fi
 
-# Refuse to publish a version that is not newer than the current release.
-LATEST_TAG=""
-if command -v gh >/dev/null 2>&1; then
-    LATEST_TAG="$(gh release view --repo "$REPO" --json tagName -q .tagName 2>/dev/null || true)"
-fi
-
 echo "==> Building release v${VERSION} (versionCode ${VERSION_CODE})"
 if [[ "${OSTYPE:-}" == msys* || "${OSTYPE:-}" == cygwin* ]]; then
     ./gradlew.bat clean :app:assembleRelease
