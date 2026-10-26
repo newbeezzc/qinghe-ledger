@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">青禾记账</string>
+    <string name="notification_listener_label">青禾自动记账</string>
+    <string name="accessibility_service_label">青禾支付页面识别</string>
+    <string name="accessibility_service_description">仅在你手动开启后，读取微信和支付宝的支付结果页面，用于在本机自动生成账目。不会上传任何内容，也不会读取聊天内容。</string>
+</resources>
