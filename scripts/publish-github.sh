@@ -34,10 +34,14 @@ if [[ -z "$VERSION" ]]; then
 fi
 
 echo "==> Building release v${VERSION} (versionCode ${VERSION_CODE})"
-if [[ "${OSTYPE:-}" == msys* || "${OSTYPE:-}" == cygwin* ]]; then
-    ./gradlew.bat clean :app:assembleRelease
+if [[ "${SKIP_BUILD:-0}" == "1" ]]; then
+    echo "    SKIP_BUILD=1, reusing app/build/outputs/apk/release/app-release.apk"
 else
-    ./gradlew clean :app:assembleRelease
+    if [[ "${OSTYPE:-}" == msys* || "${OSTYPE:-}" == cygwin* ]]; then
+        ./gradlew.bat clean :app:assembleRelease
+    else
+        ./gradlew clean :app:assembleRelease
+    fi
 fi
 
 mkdir -p dist

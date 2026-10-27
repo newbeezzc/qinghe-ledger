@@ -18,7 +18,7 @@ import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
-import com.qinghe.ledger.MainActivity
+import com.qinghe.ledger.ui.QuickEditActivity
 import com.qinghe.ledger.data.AutoRecordResult
 import com.qinghe.ledger.util.MoneyFormat
 import com.qinghe.ledger.util.formatDateTime
@@ -174,13 +174,13 @@ object AutoRecordOverlay {
             setPadding(dp(context, 20), dp(context, 9), dp(context, 20), dp(context, 9))
             setOnClickListener {
                 dismiss()
-                val intent = Intent(context, MainActivity::class.java).apply {
+                val intent = Intent(context, QuickEditActivity::class.java).apply {
                     addFlags(
                         Intent.FLAG_ACTIVITY_NEW_TASK or
                             Intent.FLAG_ACTIVITY_CLEAR_TOP or
                             Intent.FLAG_ACTIVITY_SINGLE_TOP
                     )
-                    putExtra(MainActivity.EXTRA_EDIT_TRANSACTION_ID, result.transactionId)
+                    putExtra(QuickEditActivity.EXTRA_TRANSACTION_ID, result.transactionId)
                 }
                 runCatching { context.startActivity(intent) }
             }

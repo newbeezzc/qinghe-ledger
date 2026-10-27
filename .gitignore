@@ -17,3 +17,5 @@ dist/*.apk
 .git-credentials
 local-temp/
 dist/archive/
+hs_err_pid*.log
+replay_pid*.log
