@@ -1,10 +1,12 @@
 package com.qinghe.ledger.auto
 
 import android.content.Context
+import android.provider.Settings
 import com.qinghe.ledger.data.AutoRecordResult
 import com.qinghe.ledger.data.LedgerRepository
 import com.qinghe.ledger.data.SettingsRepository
 import com.qinghe.ledger.data.model.TransactionSource
+import com.qinghe.ledger.ui.QuickEditActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -39,25 +41,16 @@ class AutoRecorder(
                 val result: AutoRecordResult =
                     repository.recordAuto(pkg, parsed, source) ?: return@withLock
 
-                fun fallbackReminder() {
-                    AutoRecordEvents.notify(result)
-                    AutoRecordNotifier.notify(context, result, source)
-                }
-
                 if (current.showAutoRecordNotification) {
-                    val overlayPosted = AutoRecordOverlay.show(
-                        context = context,
-                        result = result,
-                        onCancel = {
-                            scope.launch {
-                                if (repository.deleteAutoTransaction(result.transactionId)) {
-                                    AutoRecordEvents.notifyCancelled(result)
-                                }
-                            }
-                        },
-                        onUnavailable = { fallbackReminder() }
-                    )
-                    if (!overlayPosted) fallbackReminder()
+                    // With overlay permission Android allows us to open the
+                    // bookkeeping page from the background. If it cannot be
+                    // opened, fall back to the notification/snackbar.
+                    val canOpenPage = Settings.canDrawOverlays(context) &&
+                        QuickEditActivity.start(context, result.transactionId)
+                    if (!canOpenPage) {
+                        AutoRecordEvents.notify(result)
+                        AutoRecordNotifier.notify(context, result, source)
+                    }
                 }
             }
         }

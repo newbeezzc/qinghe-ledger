@@ -144,8 +144,8 @@ fun AutoSettingsScreen(
                         SettingsDivider()
                         PermissionRow(
                             emoji = "🪟",
-                            title = "悬浮窗提醒",
-                            subtitle = "记账后在屏幕下方弹出可修改的卡片",
+                            title = "自动记账弹窗",
+                            subtitle = "记账后直接打开记录详情，可改分类或取消",
                             enabled = permissions.overlay,
                             onClick = { openOverlaySettings(context) }
                         )
@@ -320,7 +320,7 @@ private fun DiagnosticsDialog(
         appendLine()
         appendLine("通知监听：${permissionLabel(permissions.notificationListener)}")
         appendLine("无障碍服务：${permissionLabel(permissions.accessibility)}")
-        appendLine("悬浮窗提醒：${permissionLabel(permissions.overlay)}")
+        appendLine("自动记账弹窗：${permissionLabel(permissions.overlay)}")
         appendLine("系统通知：${permissionLabel(permissions.systemNotifications)}")
         appendLine("最近自动记账：$latestAutoText")
         appendLine()
@@ -349,7 +349,7 @@ private fun DiagnosticsDialog(
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Text(
-                    text = "悬浮窗提醒：${permissionLabel(permissions.overlay)}",
+                    text = "自动记账弹窗：${permissionLabel(permissions.overlay)}",
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Text(

@@ -88,7 +88,8 @@ fun AddTransactionScreen(
     onDismiss: () -> Unit,
     onSave: (TransactionEntity) -> Unit,
     onDelete: (TransactionEntity) -> Unit,
-    onValidationError: (String) -> Unit
+    onValidationError: (String) -> Unit,
+    autoConfirm: Boolean = false
 ) {
     val context = LocalContext.current
     val initialDateTime = remember(existing) {
@@ -279,11 +280,22 @@ fun AddTransactionScreen(
                     Icon(Icons.Rounded.Close, contentDescription = "关闭")
                 }
                 Text(
-                    text = if (existing == null) "记一笔" else "编辑账目",
+                    text = when {
+                        autoConfirm -> "确认自动记账"
+                        existing == null -> "记一笔"
+                        else -> "编辑账目"
+                    },
                     style = MaterialTheme.typography.titleLarge,
                     modifier = Modifier.weight(1f)
                 )
-                if (existing != null) {
+                if (autoConfirm && existing != null) {
+                    TextButton(onClick = { showDeleteDialog = true }) {
+                        Text(
+                            text = "取消记录",
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                } else if (existing != null) {
                     IconButton(onClick = { showDeleteDialog = true }) {
                         Icon(
                             Icons.Rounded.DeleteOutline,
@@ -616,7 +628,7 @@ fun AddTransactionScreen(
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Text(
-                            text = "保存",
+                            text = if (autoConfirm) "记录" else "保存",
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onPrimary
                         )
@@ -629,8 +641,18 @@ fun AddTransactionScreen(
     if (showDeleteDialog && existing != null) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            title = { Text("删除这笔账？") },
-            text = { Text("删除后无法恢复。") },
+            title = {
+                Text(if (autoConfirm) "取消这笔自动记账？" else "删除这笔账？")
+            },
+            text = {
+                Text(
+                    if (autoConfirm) {
+                        "取消后，这笔自动记录会被删除。"
+                    } else {
+                        "删除后无法恢复。"
+                    }
+                )
+            },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -638,11 +660,16 @@ fun AddTransactionScreen(
                         onDelete(existing)
                     }
                 ) {
-                    Text("删除", color = MaterialTheme.colorScheme.error)
+                    Text(
+                        text = if (autoConfirm) "取消记录" else "删除",
+                        color = MaterialTheme.colorScheme.error
+                    )
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) { Text("取消") }
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text(if (autoConfirm) "保留" else "取消")
+                }
             }
         )
     }

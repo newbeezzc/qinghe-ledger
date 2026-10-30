@@ -502,12 +502,12 @@ private fun OverlayPermissionBanner(onClick: () -> Unit) {
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "开启悬浮窗提醒",
+                    text = "开启自动记账弹窗",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
                 Text(
-                    text = "记账后在屏幕下方弹出卡片，可直接修改",
+                    text = "记账后直接打开记录详情，可直接修改",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f)
                 )
