@@ -7,4 +7,4 @@
     android:canRetrieveWindowContent="true"
     android:description="@string/accessibility_service_description"
     android:notificationTimeout="300"
-    android:packageNames="com.tencent.mm,com.eg.android.AlipayGphone" />
+    android:packageNames="com.tencent.mm,com.eg.android.AlipayGphone,com.ss.android.ugc.aweme,com.ss.android.ugc.aweme.lite,com.sankuai.meituan,com.sankuai.meituan.takeoutnew" />

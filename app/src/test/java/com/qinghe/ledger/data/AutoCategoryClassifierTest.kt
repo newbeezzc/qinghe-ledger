@@ -157,6 +157,24 @@ class AutoCategoryClassifierTest {
     }
 
     @Test
+    fun `douyin mall falls back to shopping`() {
+        val match = classify("抖音商城")
+        assertEquals(3L, match?.category?.parentId)
+    }
+
+    @Test
+    fun `meituan bike falls back to transport`() {
+        val match = classify("美团单车")
+        assertEquals(2L, match?.category?.parentId)
+    }
+
+    @Test
+    fun `douyin product keyword refines shopping category`() {
+        val match = classify("抖音商城", "商品说明 电影票 支付成功 ¥45.00")
+        assertEquals("电影", match?.category?.name)
+    }
+
+    @Test
     fun `unknown merchant falls back to top level other`() {
         val match = classify("某某商户", "支付成功 ¥10.00", hour = 15)
         assertNotNull(match)

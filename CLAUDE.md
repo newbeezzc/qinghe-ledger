@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-青禾记账 (`com.qinghe.ledger`) is a local-first Android bookkeeping app with automatic capture from WeChat Pay / Alipay notifications and accessibility screens, plus GitHub-based in-app updates. Kotlin + Jetpack Compose + Room + DataStore, minSdk 26, target/compileSdk 35.
+青禾记账 (`com.qinghe.ledger`) is a local-first Android bookkeeping app with automatic capture from WeChat Pay, Alipay, Douyin and Meituan notifications and accessibility screens, plus GitHub-based in-app updates. Kotlin + Jetpack Compose + Room + DataStore, minSdk 26, target/compileSdk 35.
 
 The project directory contains Chinese characters. `android.overridePathCheck=true` in `gradle.properties` allows AGP to build, but Gradle's **test worker** cannot read the Chinese classpath. Run unit tests through an ASCII drive mapping (see Commands).
 
@@ -71,6 +71,8 @@ Single-module, single-activity Compose app. Manual DI: `QingheApp` creates `di/A
 - There is **no intermediate overlay card**. After inserting an auto record, `AutoRecorder` opens `QuickEditActivity` directly when `showAutoRecordNotification` is on and `SYSTEM_ALERT_WINDOW` is granted (Android allows this background activity start with the SAW permission). If it cannot open the page, it falls back to `AutoRecordEvents` (snackbar) and the high-priority notification.
 - `QuickEditActivity` (`ui/QuickEditActivity.kt`) is a full-screen, `exported=false`, `taskAffinity=""` activity that **reuses `AddTransactionScreen` with `autoConfirm = true`**. The auto amount/category/account/note/payment time are prefilled; the category UI is the same two-level grid/FlowRow as manual entry. The keypad button says 记录, the top action says 取消记录. 记录 calls `updateTransaction` + `learnCategoryRule`; 取消记录 calls `deleteAutoTransaction`; both finish back to WeChat/Alipay without opening `MainActivity`. X/back just closes and keeps the already-inserted record. Do not reintroduce a separate small card or a dropdown category picker.
 - `data/AutoCategoryClassifier.kt` (pure Kotlin) resolves the category for every auto record: user rules first (user rules beat built-ins, longest keyword wins), then specific merchant/product keywords, then platform keywords (美团/淘宝/…), then meal time for 餐饮, then the parent's 其他 child. It always tries to land on a subcategory. Add new merchant keywords there and extend `AutoCategoryClassifierTest`.
+- Supported source packages live in `PaymentParser.supportedPackages`: WeChat, Alipay, Douyin (`com.ss.android.ugc.aweme`, lite variant), Meituan (`com.sankuai.meituan`, takeout). Adding a source requires updating the parser package set + notification context, `res/xml/accessibility_service_config.xml` packageNames, manifest `<queries>`, `AutoCategoryClassifier` platform hints, and account mapping.
+- `AccountType` includes `DOUYIN` and `MEITUAN`; the first auto record from those apps creates a dedicated account on demand (new installs seed them too). Do not route new sources into cash silently.
 - Both capture paths go through `AutoRecorder.handle`, so every auto record attempts to open the confirmation page — do not add a second insert path that bypasses it.
 
 ### UI
@@ -96,7 +98,7 @@ Single-module, single-activity Compose app. Manual DI: `QingheApp` creates `di/A
 
 - `app/src/test/java/com/qinghe/ledger/auto/PaymentParserTest.kt` — notification/screen parsing, false positives, timestamps, categories/notes.
 - `app/src/test/java/com/qinghe/ledger/update/UpdateVersionTest.kt` — semver comparison.
-- Current expected total: 47 tests (28 parser + 12 classifier + 4 updater + 3 category ordering).
+- Current expected total: 55 tests (33 parser + 15 classifier + 4 updater + 3 category ordering).
 
 ## Invariants / gotchas
 

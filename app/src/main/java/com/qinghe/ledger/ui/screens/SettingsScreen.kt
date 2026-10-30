@@ -117,7 +117,7 @@ fun SettingsScreen(
                 GroupedNavRow(
                     emoji = "💳",
                     title = "账户管理",
-                    subtitle = "现金、微信、支付宝、银行卡",
+                    subtitle = "现金、微信、支付宝、抖音、美团、银行卡",
                     onClick = onOpenAccounts
                 )
                 SettingsDivider()

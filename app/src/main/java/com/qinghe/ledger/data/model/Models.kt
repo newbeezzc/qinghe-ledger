@@ -26,6 +26,8 @@ enum class AccountType(val label: String, val emoji: String) {
     CASH("现金", "💵"),
     WECHAT("微信", "💬"),
     ALIPAY("支付宝", "🐜"),
+    DOUYIN("抖音", "🎵"),
+    MEITUAN("美团", "🟡"),
     BANK("银行卡", "🏦"),
     CREDIT("信用卡", "💳"),
     OTHER("其他", "📦");

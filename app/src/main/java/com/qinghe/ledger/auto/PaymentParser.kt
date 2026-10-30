@@ -30,8 +30,16 @@ data class ParseResult(
 object PaymentParser {
     const val WECHAT_PACKAGE = "com.tencent.mm"
     const val ALIPAY_PACKAGE = "com.eg.android.AlipayGphone"
+    const val DOUYIN_PACKAGE = "com.ss.android.ugc.aweme"
+    const val DOUYIN_LITE_PACKAGE = "com.ss.android.ugc.aweme.lite"
+    const val MEITUAN_PACKAGE = "com.sankuai.meituan"
+    const val MEITUAN_TAKEOUT_PACKAGE = "com.sankuai.meituan.takeoutnew"
 
-    val supportedPackages = setOf(WECHAT_PACKAGE, ALIPAY_PACKAGE)
+    val douyinPackages = setOf(DOUYIN_PACKAGE, DOUYIN_LITE_PACKAGE)
+    val meituanPackages = setOf(MEITUAN_PACKAGE, MEITUAN_TAKEOUT_PACKAGE)
+
+    val supportedPackages = setOf(WECHAT_PACKAGE, ALIPAY_PACKAGE) +
+        douyinPackages + meituanPackages
 
     private val amountWithSymbol =
         Regex("""[¥￥]\s*([0-9]{1,7}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)""")
@@ -49,11 +57,12 @@ object PaymentParser {
     private val merchantAfterXiang =
         Regex("""向\s*([^\s，,。；;]{1,24}?)\s*(?:付款|转账)""")
     private val merchantAfterLabel =
-        Regex("""(?:收款方|商户全称|商户名称|交易对方|付款给|转账给|商户|对方)[:：]?\s*([^\s，,。；;]{1,24})""")
+        Regex("""(?:收款方|商户全称|商户名称|交易对方|付款给|转账给|商家|店铺|商品名称|商户|对方)[:：]?\s*([^\s，,。；;]{1,24})""")
 
     private val merchantNoise = setOf(
         "返回", "账单详情", "账单", "详情", "更多", "复制", "投诉", "联系客服",
-        "微信支付", "支付宝", "已完成", "支付成功", "交易成功", "当前状态",
+        "微信支付", "支付宝", "抖音", "抖音支付", "抖音商城", "美团", "美团支付", "美团外卖",
+        "已完成", "支付成功", "交易成功", "当前状态",
         "查看", "全部账单", "服务", "钱包", "零钱", "余额宝", "花呗", "银行卡",
         "转账", "收款", "付款", "退款", "消费", "收入", "支出"
     )
@@ -108,8 +117,8 @@ object PaymentParser {
         "交易单号", "账单详情", "付款方式", "支付方式", "当前状态",
         "交易成功", "支付成功", "转账成功", "已收款", "付款成功",
         "收款方", "交易时间", "创建时间", "支付时间", "付款时间",
-        "商品说明", "订单号", "商户全称", "商户名称", "零钱",
-        "花呗", "余额宝", "银行卡", "账单分类", "转账给"
+        "商品说明", "订单号", "商户全称", "商户名称", "商家", "店铺",
+        "零钱", "花呗", "余额宝", "银行卡", "账单分类", "转账给"
     )
 
     fun fromNotification(pkg: String, title: String, body: String): ParsedPayment? =
@@ -226,6 +235,18 @@ object PaymentParser {
                     title.contains("交易提醒") ||
                     title.contains("支付提醒") ||
                     title.contains("服务提醒")
+            in douyinPackages ->
+                title.contains("抖音") ||
+                    body.contains("抖音") ||
+                    body.contains("交易单号") ||
+                    title.contains("订单支付") ||
+                    body.contains("订单支付")
+            in meituanPackages ->
+                title.contains("美团") ||
+                    body.contains("美团") ||
+                    body.contains("交易单号") ||
+                    title.contains("订单支付") ||
+                    body.contains("订单支付")
             else -> false
         }
 

@@ -437,7 +437,7 @@ private fun AutoRecordBanner(onClick: () -> Unit) {
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
                 Text(
-                    text = "微信、支付宝付款后自动入账",
+                    text = "微信、支付宝、抖音、美团付款后自动入账",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f)
                 )

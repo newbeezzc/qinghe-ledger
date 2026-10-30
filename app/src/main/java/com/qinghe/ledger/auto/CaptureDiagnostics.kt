@@ -33,8 +33,8 @@ data class CaptureDiagnosticsState(
     fun toText(): String = buildString {
         appendLine("无障碍服务连接：${if (accessibilityConnected) "是" else "否"}")
         appendLine("通知监听连接：${if (notificationListenerConnected) "是" else "否"}")
-        appendLine("累计微信/支付宝页面扫描：$screenEventCount")
-        appendLine("累计微信/支付宝通知：$notificationEventCount")
+        appendLine("累计支付页面扫描：$screenEventCount")
+        appendLine("累计支付通知：$notificationEventCount")
         appendLine()
 
         appendLine("最近成功识别：")

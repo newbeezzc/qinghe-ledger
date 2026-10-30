@@ -30,7 +30,7 @@ object AutoRecordNotifier {
             "自动记账提醒",
             NotificationManager.IMPORTANCE_HIGH
         ).apply {
-            description = "微信、支付宝付款被自动记录时提醒"
+            description = "微信、支付宝、抖音、美团付款被自动记录时提醒"
             setShowBadge(true)
             enableVibration(true)
             vibrationPattern = longArrayOf(0, 150, 100, 150)

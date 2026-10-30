@@ -129,7 +129,7 @@ fun AutoSettingsScreen(
                         PermissionRow(
                             emoji = "🔔",
                             title = "通知监听",
-                            subtitle = "读取微信、支付宝的支付通知",
+                            subtitle = "读取微信、支付宝、抖音、美团的支付通知",
                             enabled = permissions.notificationListener,
                             onClick = { openNotificationListenerSettings(context) }
                         )
@@ -137,7 +137,7 @@ fun AutoSettingsScreen(
                         PermissionRow(
                             emoji = "👀",
                             title = "支付页面识别",
-                            subtitle = "读取微信、支付宝的支付成功页",
+                            subtitle = "读取微信、支付宝、抖音、美团的支付成功页",
                             enabled = permissions.accessibility,
                             onClick = { openAccessibilitySettings(context) }
                         )
@@ -237,7 +237,7 @@ fun AutoSettingsScreen(
             text = {
                 Text(
                     "1. 通知监听：读取微信「微信支付」和支付宝的支付通知，提取金额与商户。\n\n" +
-                        "2. 页面识别：只在你手动开启无障碍权限后，读取微信、支付宝的支付成功页或单笔账单详情页；支付成功页需要成功标题、金额和一个上下文标记（完成、支付方式、零钱等），账单详情页需要交易单号、付款方式等多个标记；聊天内容不会被记录。\n\n" +
+                        "2. 页面识别：只在你手动开启无障碍权限后，读取微信、支付宝、抖音、美团的支付成功页或单笔账单详情页；支付成功页需要成功标题、金额和一个上下文标记（完成、支付方式、零钱等），账单详情页需要交易单号、付款方式等多个标记；聊天内容不会被记录。\n\n" +
                         "3. 自动记录会按商户名、商品说明和规则归入小类，并可在明细里随时修改或删除。\n\n" +
                         "所有解析都在本机完成；应用仅在检查更新时访问 GitHub。自动识别仍可能有误，请偶尔核对账目。"
                 )

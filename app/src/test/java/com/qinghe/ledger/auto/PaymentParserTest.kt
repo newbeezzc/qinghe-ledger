@@ -321,4 +321,60 @@ class PaymentParserTest {
         requireNotNull(result)
         assertEquals(123450L, result.amountCents)
     }
+
+    @Test
+    fun `douyin payment notification is parsed`() {
+        val result = PaymentParser.fromNotification(
+            PaymentParser.DOUYIN_PACKAGE,
+            "抖音支付",
+            "支付成功 ¥68.00"
+        )
+        requireNotNull(result)
+        assertEquals(PaymentType.EXPENSE, result.type)
+        assertEquals(6800L, result.amountCents)
+    }
+
+    @Test
+    fun `meituan takeout notification is parsed`() {
+        val result = PaymentParser.fromNotification(
+            PaymentParser.MEITUAN_TAKEOUT_PACKAGE,
+            "美团外卖",
+            "订单支付成功，共¥25.80"
+        )
+        requireNotNull(result)
+        assertEquals(PaymentType.EXPENSE, result.type)
+        assertEquals(2580L, result.amountCents)
+    }
+
+    @Test
+    fun `douyin chat notification is ignored`() {
+        val result = PaymentParser.fromNotification(
+            PaymentParser.DOUYIN_PACKAGE,
+            "张三",
+            "我已经支付成功100元了"
+        )
+        assertNull(result)
+    }
+
+    @Test
+    fun `meituan success page is parsed`() {
+        val result = PaymentParser.fromScreen(
+            PaymentParser.MEITUAN_PACKAGE,
+            "支付成功 ¥25.80 订单号 123456 支付方式 美团支付 完成"
+        )
+        requireNotNull(result)
+        assertEquals(PaymentType.EXPENSE, result.type)
+        assertEquals(2580L, result.amountCents)
+    }
+
+    @Test
+    fun `douyin success page is parsed`() {
+        val result = PaymentParser.fromScreen(
+            PaymentParser.DOUYIN_PACKAGE,
+            "支付成功 ¥68.00 订单号 123456 支付方式 抖音支付 完成"
+        )
+        requireNotNull(result)
+        assertEquals(PaymentType.EXPENSE, result.type)
+        assertEquals(6800L, result.amountCents)
+    }
 }

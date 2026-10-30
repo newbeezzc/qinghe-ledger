@@ -321,10 +321,30 @@ class LedgerRepository(private val db: AppDatabase) {
         val preferredAccountType = when (pkg) {
             com.qinghe.ledger.auto.PaymentParser.WECHAT_PACKAGE -> AccountType.WECHAT
             com.qinghe.ledger.auto.PaymentParser.ALIPAY_PACKAGE -> AccountType.ALIPAY
+            in com.qinghe.ledger.auto.PaymentParser.douyinPackages -> AccountType.DOUYIN
+            in com.qinghe.ledger.auto.PaymentParser.meituanPackages -> AccountType.MEITUAN
             else -> AccountType.CASH
         }
-        val account = accounts.firstOrNull { it.type == preferredAccountType.name }
-            ?: accounts.first()
+        var account = accounts.firstOrNull { it.type == preferredAccountType.name }
+        if (account == null &&
+            preferredAccountType in listOf(AccountType.DOUYIN, AccountType.MEITUAN)
+        ) {
+            // First purchase in a new source app: create a dedicated wallet
+            // account so the record does not silently fall into cash.
+            val id = accountDao.insert(
+                AccountEntity(
+                    name = preferredAccountType.label,
+                    type = preferredAccountType.name,
+                    sortOrder = accounts.size
+                )
+            )
+            account = AccountEntity(
+                id = id,
+                name = preferredAccountType.label,
+                type = preferredAccountType.name
+            )
+        }
+        account = account ?: accounts.first()
 
         val type = if (parsed.type == PaymentType.INCOME) {
             TransactionType.INCOME
@@ -379,6 +399,8 @@ class LedgerRepository(private val db: AppDatabase) {
         AccountEntity(name = "现金", type = AccountType.CASH.name),
         AccountEntity(name = "微信", type = AccountType.WECHAT.name),
         AccountEntity(name = "支付宝", type = AccountType.ALIPAY.name),
+        AccountEntity(name = "抖音", type = AccountType.DOUYIN.name),
+        AccountEntity(name = "美团", type = AccountType.MEITUAN.name),
         AccountEntity(name = "银行卡", type = AccountType.BANK.name)
     )
 

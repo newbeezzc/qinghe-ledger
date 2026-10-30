@@ -678,6 +678,8 @@ fun AddTransactionScreen(
 private fun typeEmoji(typeName: String): String = when (typeName) {
     "WECHAT" -> "💬"
     "ALIPAY" -> "🐜"
+    "DOUYIN" -> "🎵"
+    "MEITUAN" -> "🟡"
     "BANK" -> "🏦"
     "CREDIT" -> "💳"
     "CASH" -> "💵"
