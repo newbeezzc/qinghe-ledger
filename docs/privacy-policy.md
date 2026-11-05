@@ -21,13 +21,13 @@
 | 悬浮窗（显示在其他应用上层） | 自动记账后显示金额、分类和「修改/取消记账」按钮 | 仅在本机显示 |
 | 通知权限 | 自动记账后的提醒 | 仅在本机显示 |
 | 安装未知应用 | 安装你确认下载的应用更新 | 仅在本机使用 |
-| 网络权限 | 检查并下载 GitHub Release 更新 | 只访问 GitHub，不上传账目、通知或页面文本 |
+| 网络权限 | 检查并下载 GitHub Release 更新 | 访问 GitHub；直连失败时经公共镜像下载 APK，不上传账目、通知或页面文本 |
 
 通知和无障碍权限都需要你在系统设置中手动开启；你可以随时关闭，关闭后本应用将无法自动记账，但仍可手动记账。
 
 ## 3. 联网与第三方
 
-本应用唯一的联网用途是检查/下载更新，访问 GitHub（`api.github.com`、`github.com`、`release-assets.githubusercontent.com`）。请求中只包含应用版本等更新检查所需信息，不包含你的账目、通知内容或页面文本。
+本应用唯一的联网用途是检查/下载更新，访问 GitHub（`api.github.com`、`github.com`、`release-assets.githubusercontent.com`）。直连失败时，会依次尝试 `ghfast.top`、`gh-proxy.com`、`ghproxy.net` 等公共镜像下载公开仓库的 APK；镜像只能看到更新请求，请求中只包含应用版本等更新检查所需信息，不包含你的账目、通知内容或页面文本。下载的 APK 在安装前仍会校验包名、版本和签名。
 
 GitHub 的隐私政策见：https://docs.github.com/site-policy/privacy-policies/github-privacy-statement
 

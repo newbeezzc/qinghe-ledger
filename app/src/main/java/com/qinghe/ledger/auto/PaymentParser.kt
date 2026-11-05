@@ -80,13 +80,18 @@ object PaymentParser {
         "支付成功", "付款成功", "支付完成", "付款完成", "已支付", "支付了",
         "扣款成功", "扣款", "消费", "支出", "转账给", "成功付款", "付款", "交易成功"
     )
-    private val screenPaymentWords = listOf(
-        "支付", "交易", "转账", "收款", "退款", "消费", "扣款", "账单"
-    )
-
     private val billNoiseWords = listOf(
         "本月账单", "月账单", "年度账单", "账单已出", "账单日", "还款提醒",
         "账单分期", "额度提醒", "账单汇总"
+    )
+
+    /**
+     * Credit-card / repayment wording. Checked only for bill-detail candidates:
+     * a real payment result page may legitimately mention "下月应还" after a
+     * 花呗 payment, but a repayment page must never be recorded as a purchase.
+     */
+    private val repaymentWords = listOf(
+        "本期账单", "账单金额", "最低还款", "还款日", "应还", "待还"
     )
 
     private val successScreenWords = listOf(
@@ -94,18 +99,70 @@ object PaymentParser {
         "转账成功", "收款成功", "已收款", "收款到账"
     )
 
+    private val billDetailTitles = listOf(
+        "账单详情", "交易详情", "转账详情", "订单详情", "付款详情"
+    )
+
+    private val billDetailFields = listOf(
+        "交易单号", "订单号", "当前状态", "已完成", "交易成功", "支付成功",
+        "付款成功", "收款成功", "付款方式", "支付方式", "收款方",
+        "商户全称", "商户名称", "商品说明", "账单分类"
+    ) + paymentTimeLabels
+
+    private val detailStatusWords = listOf(
+        "当前状态", "已完成", "交易成功", "支付成功", "付款成功",
+        "收款成功", "已收款", "已到账"
+    )
+
     /**
-     * Fields that appear on a payment result page ("支付成功" / "付款成功").
-     * Such a page often has only the success title, amount, merchant and a
-     * 完成 button, so it is accepted with one context field instead of the two
-     * bill-detail markers required elsewhere.
+     * A payment result page ("支付成功" / "付款成功") needs one *strong* page
+     * marker on top of the success title. Payment-method labels such as
+     * 付款方式 / 花呗 / 余额宝 are deliberately absent: they are ordinary
+     * navigation text in Alipay and must never count as evidence.
      */
     private val successPageContext = listOf(
-        "交易单号", "账单详情", "付款方式", "支付方式", "当前状态",
-        "零钱", "花呗", "余额宝", "银行卡", "商户全称", "商户名称",
+        "交易单号", "账单详情", "当前状态", "商户全称", "商户名称",
         "收款方", "商品说明", "订单号", "完成", "查看账单",
-        "账单分类", "支付时间", "付款时间", "交易时间"
+        "账单分类", "支付时间", "付款时间", "交易时间",
+        "返回商家", "我知道了"
     )
+
+    // Orders that were never paid, or were closed/cancelled, are not expenses.
+    private val closedOrderWords = listOf(
+        "待付款", "等待付款", "未付款", "未支付", "交易关闭", "订单关闭",
+        "已取消", "已关闭"
+    )
+
+    /**
+     * Amounts that belong to asset/balance widgets rather than to a payment.
+     * Used only when the amount has no adjacent payment evidence.
+     */
+    private val assetAmountWords = listOf(
+        "余额", "可用", "额度", "总资产", "收益", "积分", "能量",
+        "冻结", "待还", "应还", "还款", "优惠", "立减", "红包",
+        "累计", "转入", "转出", "理财", "基金", "黄金", "保险",
+        "信用", "借呗", "备用金", "分期"
+    )
+
+    private val paymentLineWords = successScreenWords + billDetailTitles + listOf(
+        "交易单号", "订单号", "交易金额", "订单金额", "支付金额",
+        "付款金额", "实付金额", "退款金额", "合计", "付款方式", "支付方式"
+    )
+
+    private val screenLabeledAmounts = listOf(
+        "实付金额", "实付款", "实付", "实收金额", "实收款", "实收",
+        "支付金额", "付款金额", "交易金额", "订单金额", "退款金额", "合计"
+    ).map { label ->
+        Regex(
+            """${Regex.escape(label)}[:：]?\s*[¥￥]?\s*([0-9]{1,7}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)"""
+        )
+    }
+    private val genericAmountLabel = Regex(
+        """金额[:：]?\s*[¥￥]?\s*([0-9]{1,7}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)"""
+    )
+
+    private val tradeNoValue = Regex("""交易单号[:：]?\s*([A-Za-z0-9]{4,})""")
+    private val orderNoValue = Regex("""订单号[:：]?\s*([A-Za-z0-9]{4,})""")
 
     // A chat page can contain words like "支付成功" and an amount; skip it
     // before the success-page rule gets a chance to fire.
@@ -113,13 +170,7 @@ object PaymentParser {
         "按住 说话", "按住说话", "聊天信息", "语音通话", "视频通话"
     )
 
-    private val screenIndicators = listOf(
-        "交易单号", "账单详情", "付款方式", "支付方式", "当前状态",
-        "交易成功", "支付成功", "转账成功", "已收款", "付款成功",
-        "收款方", "交易时间", "创建时间", "支付时间", "付款时间",
-        "商品说明", "订单号", "商户全称", "商户名称", "商家", "店铺",
-        "零钱", "花呗", "余额宝", "银行卡", "账单分类", "转账给"
-    )
+    private enum class ScreenPage { SUCCESS, BILL_DETAIL }
 
     fun fromNotification(pkg: String, title: String, body: String): ParsedPayment? =
         analyzeNotification(pkg, title, body).payment
@@ -140,17 +191,27 @@ object PaymentParser {
         if (!hasNotificationContext(pkg, titleText, bodyText)) {
             return ParseResult(null, "不是支付类通知")
         }
-        return parse(pkg, combined, requireScreenIndicators = false)
+        return parseNotification(combined)
     }
 
     fun fromScreen(pkg: String, screenText: String): ParsedPayment? =
         analyzeScreen(pkg, screenText).payment
 
+    /**
+     * Screen capture is intentionally strict: a page must look like a payment
+     * result page or a single bill detail page *before* any amount is read.
+     * Counting generic words (支付 / 交易 / 花呗 / 余额宝 …) is not enough —
+     * those appear all over ordinary Alipay screens.
+     */
     fun analyzeScreen(pkg: String, screenText: String): ParseResult {
         if (pkg !in supportedPackages) {
             return ParseResult(null, "不支持的来源应用")
         }
-        val combined = screenText.normalize()
+        val lines = screenText.lineSequence()
+            .map { it.normalize() }
+            .filter { it.isNotEmpty() }
+            .toList()
+        val combined = lines.joinToString(" ")
         if (combined.length < 8) {
             return ParseResult(null, "页面文本太少")
         }
@@ -160,60 +221,100 @@ object PaymentParser {
         if (chatNoiseWords.any { combined.contains(it) }) {
             return ParseResult(null, "聊天界面，已忽略")
         }
-        return parse(pkg, combined, requireScreenIndicators = true)
-    }
-
-    private fun parse(
-        pkg: String,
-        combined: String,
-        requireScreenIndicators: Boolean
-    ): ParseResult {
-        val candidateWords = incomeWords + expenseWords +
-            (if (requireScreenIndicators) screenPaymentWords else emptyList())
-        val hasPaymentWord = candidateWords.any { combined.contains(it) } ||
-            receivedAmount.containsMatchIn(combined)
-        if (!hasPaymentWord) {
-            return ParseResult(null, "未发现支付关键词")
+        if (closedOrderWords.any { combined.contains(it) }) {
+            return ParseResult(null, "订单未支付/已关闭，已忽略")
         }
 
-        if (requireScreenIndicators) {
-            val isSuccessPage = successScreenWords.any { combined.contains(it) }
-            if (isSuccessPage) {
-                val contextMarkers = successPageContext.count { combined.contains(it) }
-                if (contextMarkers < 1) {
-                    return ParseResult(null, "支付成功页标记不足（已识别 $contextMarkers/1）")
-                }
-            } else {
-                val indicators = screenIndicators.count { combined.contains(it) }
-                if (indicators < 2) {
-                    return ParseResult(null, "支付页面标记不足（已识别 $indicators/2）")
-                }
-            }
+        val hasDetailTitle = billDetailTitles.any { combined.contains(it) }
+        // Several distinct amounts on one page = a bill/order list, not one
+        // payment. Distinct values keep duplicated accessibility nodes from
+        // inflating the count on a real detail page.
+        val distinctAmounts = amountWithSymbol.findAll(combined)
+            .map { it.groupValues[1] }
+            .distinct()
+            .count()
+        if (distinctAmounts >= 3 && !hasDetailTitle) {
+            return ParseResult(null, "疑似账单列表页，已忽略")
+        }
+        val distinctOrderNos = orderNoValue.findAll(combined)
+            .map { it.groupValues[1] }
+            .distinct()
+            .count()
+        val distinctTradeNos = tradeNoValue.findAll(combined)
+            .map { it.groupValues[1] }
+            .distinct()
+            .count()
+        if (distinctOrderNos >= 2 || distinctTradeNos >= 2) {
+            return ParseResult(null, "疑似多笔账单列表页，已忽略")
         }
 
-        val type = detectType(combined)
-            ?: if (requireScreenIndicators) {
-                // Most single bill detail pages that only label "支付/交易"
-                // without a direction word are outflows; users can edit it.
-                PaymentType.EXPENSE
-            } else {
-                return ParseResult(null, "无法判断收支方向")
-            }
-        val amountCents = extractAmount(combined, allowLoose = requireScreenIndicators)
+        val hasSuccessWord = successScreenWords.any { combined.contains(it) }
+        val page = when {
+            hasDetailTitle &&
+                billDetailFields.count { combined.contains(it) } >= 2 ->
+                ScreenPage.BILL_DETAIL
+
+            (combined.contains("交易单号") || combined.contains("订单号")) &&
+                billDetailFields.count { combined.contains(it) } >= 3 &&
+                detailStatusWords.any { combined.contains(it) } ->
+                ScreenPage.BILL_DETAIL
+
+            hasSuccessWord &&
+                successPageContext.any { combined.contains(it) } ->
+                ScreenPage.SUCCESS
+
+            hasSuccessWord ->
+                // Diagnostics and docs refer to this reason; keep the wording.
+                return ParseResult(null, "支付成功页标记不足（未发现完成/交易单号等上下文）")
+
+            else -> return ParseResult(null, "不是支付结果/账单详情页，已忽略")
+        }
+
+        if (page == ScreenPage.BILL_DETAIL &&
+            repaymentWords.any { combined.contains(it) }
+        ) {
+            return ParseResult(null, "账单汇总/还款提醒，已忽略")
+        }
+
+        val amountCents = extractScreenAmount(combined, lines)
             ?: return ParseResult(null, "未找到金额")
+        val type = detectType(combined) ?: PaymentType.EXPENSE
         val merchant = extractMerchant(combined)
-        val occurredAtMillis = if (requireScreenIndicators) {
-            extractOccurredAt(combined)
-        } else {
-            null
-        }
         return ParseResult(
             payment = ParsedPayment(
                 type = type,
                 amountCents = amountCents,
                 merchant = merchant,
                 rawText = combined.take(500),
-                occurredAtMillis = occurredAtMillis
+                occurredAtMillis = extractOccurredAt(combined)
+            ),
+            reason = when (page) {
+                ScreenPage.BILL_DETAIL -> "识别成功（账单详情页）"
+                ScreenPage.SUCCESS -> "识别成功（支付成功页）"
+            }
+        )
+    }
+
+    private fun parseNotification(combined: String): ParseResult {
+        val hasPaymentWord = incomeWords.any { combined.contains(it) } ||
+            expenseWords.any { combined.contains(it) } ||
+            receivedAmount.containsMatchIn(combined)
+        if (!hasPaymentWord) {
+            return ParseResult(null, "未发现支付关键词")
+        }
+
+        val type = detectType(combined)
+            ?: return ParseResult(null, "无法判断收支方向")
+        val amountCents = extractAmount(combined)
+            ?: return ParseResult(null, "未找到金额")
+        val merchant = extractMerchant(combined)
+        return ParseResult(
+            payment = ParsedPayment(
+                type = type,
+                amountCents = amountCents,
+                merchant = merchant,
+                rawText = combined.take(500),
+                occurredAtMillis = null
             ),
             reason = "识别成功"
         )
@@ -254,10 +355,20 @@ object PaymentParser {
         // An explicit +/- sign on the amount is the strongest signal.
         signedAmountType(text)?.let { return it }
 
+        // Strip brand words and navigation entries first: "支付宝" contains
+        // "支付", "收付款"/"付款码" contain "付款", and "花呗"/"余额宝" are
+        // ordinary home-page text. Without this, every Alipay screen looks
+        // like an expense.
         // "收款方", "付款方式" and "支付方式" are field labels that appear on
-        // both income and expense pages. Strip them before keyword matching so
-        // an income page is not mistaken for an expense because it says "付款方式".
+        // both income and expense pages, so they are stripped as well.
         val neutral = text
+            .replace("支付宝", "")
+            .replace("微信支付", "")
+            .replace("抖音支付", "")
+            .replace("美团支付", "")
+            .replace("收付款", "")
+            .replace("付款码", "")
+            .replace("收款码", "")
             .replace("收款方", "")
             .replace("收款账户", "")
             .replace("收款机构", "")
@@ -287,18 +398,38 @@ object PaymentParser {
         return null
     }
 
-    private fun extractAmount(text: String, allowLoose: Boolean): Long? {
-        if (allowLoose) {
-            findCents(labeledAmount, text)?.let { return it }
-            findCents(amountWithSymbol, text)?.let { return it }
-            findCents(amountWithCurrencyCode, text)?.let { return it }
-            findCents(standaloneAmount, text)?.let { return it }
-            findCents(amountWithYuan, text)?.let { return it }
-        } else {
-            findCents(amountWithSymbol, text)?.let { return it }
-            findCents(amountWithCurrencyCode, text)?.let { return it }
-            findCents(amountWithYuan, text)?.let { return it }
-            findCents(labeledAmount, text)?.let { return it }
+    private fun extractAmount(text: String): Long? {
+        findCents(amountWithSymbol, text)?.let { return it }
+        findCents(amountWithCurrencyCode, text)?.let { return it }
+        findCents(amountWithYuan, text)?.let { return it }
+        findCents(labeledAmount, text)?.let { return it }
+        return null
+    }
+
+    /**
+     * Screen amounts are read only after the page shape has been accepted.
+     * Explicit labels win; bare currency amounts are skipped when the line
+     * describes a balance, credit limit, discount or reward.
+     */
+    private fun extractScreenAmount(text: String, lines: List<String>): Long? {
+        for (regex in screenLabeledAmounts) {
+            findCents(regex, text)?.let { return it }
+        }
+        findCents(genericAmountLabel, text)?.let { return it }
+        findCentsOnPaymentLines(amountWithSymbol, lines)?.let { return it }
+        findCentsOnPaymentLines(amountWithCurrencyCode, lines)?.let { return it }
+        findCentsOnPaymentLines(standaloneAmount, lines)?.let { return it }
+        findCentsOnPaymentLines(amountWithYuan, lines)?.let { return it }
+        return null
+    }
+
+    private fun findCentsOnPaymentLines(regex: Regex, lines: List<String>): Long? {
+        for (line in lines) {
+            val looksLikeAsset =
+                assetAmountWords.any { line.contains(it) } &&
+                    paymentLineWords.none { line.contains(it) }
+            if (looksLikeAsset) continue
+            findCents(regex, line)?.let { return it }
         }
         return null
     }

@@ -46,6 +46,7 @@ fun SettingsScreen(
     onOpenRules: () -> Unit,
     onCheckUpdate: () -> Unit,
     onSetGithubRepo: (String) -> Unit,
+    onSetUpdateMirror: (String) -> Unit,
     onToggleAutoCheckUpdate: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -63,6 +64,7 @@ fun SettingsScreen(
         else -> "已关闭"
     }
     var showRepoDialog by remember { mutableStateOf(false) }
+    var showMirrorDialog by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -164,6 +166,15 @@ fun SettingsScreen(
                     onClick = { showRepoDialog = true }
                 )
                 SettingsDivider()
+                GroupedNavRow(
+                    emoji = "🛰️",
+                    title = "更新镜像",
+                    subtitle = settings.updateMirror.ifBlank {
+                        "直连失败时自动尝试内置镜像"
+                    },
+                    onClick = { showMirrorDialog = true }
+                )
+                SettingsDivider()
                 GroupedValueRow(
                     emoji = "ℹ️",
                     title = "版本",
@@ -194,6 +205,74 @@ fun SettingsScreen(
             }
         )
     }
+
+    if (showMirrorDialog) {
+        UpdateMirrorDialog(
+            current = settings.updateMirror,
+            onDismiss = { showMirrorDialog = false },
+            onSave = { mirror ->
+                onSetUpdateMirror(mirror)
+                showMirrorDialog = false
+            }
+        )
+    }
+}
+
+@Composable
+private fun UpdateMirrorDialog(
+    current: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit
+) {
+    var input by remember(current) { mutableStateOf(current) }
+    val normalized = input.trim()
+    val valid = normalized.isEmpty() || (
+        (normalized.startsWith("https://") || normalized.startsWith("http://")) &&
+            !normalized.contains(' ') &&
+            normalized.length <= 200
+        )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("更新镜像") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = input,
+                    onValueChange = { if (it.length <= 200) input = it },
+                    label = { Text("镜像前缀或 {url} 模板") },
+                    placeholder = { Text("https://ghfast.top/") },
+                    singleLine = true,
+                    isError = !valid,
+                    supportingText = {
+                        Text(
+                            if (valid) {
+                                "留空则自动尝试内置镜像。可填 https://ghfast.top/ 这类前缀，或 https://proxy/?u={url} 这类模板。"
+                            } else {
+                                "需以 http:// 或 https:// 开头，且不能包含空格"
+                            }
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = "镜像只负责加速下载；安装前仍会校验包名、版本和签名，镜像无法替换成其他 APK。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = valid,
+                onClick = { onSave(normalized) }
+            ) { Text("保存") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        }
+    )
 }
 
 @Composable

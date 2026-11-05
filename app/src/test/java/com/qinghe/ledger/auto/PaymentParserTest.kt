@@ -377,4 +377,128 @@ class PaymentParserTest {
         assertEquals(PaymentType.EXPENSE, result.type)
         assertEquals(6800L, result.amountCents)
     }
+
+    @Test
+    fun `alipay home page with balances is not recorded`() {
+        val result = PaymentParser.fromScreen(
+            PaymentParser.ALIPAY_PACKAGE,
+            """
+            支付宝
+            扫一扫
+            收付款
+            出行
+            卡包
+            花呗 可用额度 ¥2,500.00
+            余额宝 昨日收益 ¥0.52
+            银行卡
+            首页 理财 生活 消息 我的
+            """.trimIndent()
+        )
+        assertNull(result)
+    }
+
+    @Test
+    fun `alipay profile page with worth and limits is not recorded`() {
+        val result = PaymentParser.fromScreen(
+            PaymentParser.ALIPAY_PACKAGE,
+            """
+            支付宝 我的
+            总资产 ¥12,345.67
+            花呗 可用额度 ¥2,500.00
+            余额宝 ¥1,234.56
+            银行卡 2 张
+            首页 理财 生活 消息 我的
+            """.trimIndent()
+        )
+        assertNull(result)
+    }
+
+    @Test
+    fun `alipay balance page with a number is not recorded`() {
+        val result = PaymentParser.fromScreen(
+            PaymentParser.ALIPAY_PACKAGE,
+            "余额宝 七日年化 2.35% 昨日收益 0.52 元 转入 转出 支付宝"
+        )
+        assertNull(result)
+    }
+
+    @Test
+    fun `alipay message list with success cards is not recorded`() {
+        val result = PaymentParser.fromScreen(
+            PaymentParser.ALIPAY_PACKAGE,
+            """
+            支付成功 ¥12.34 付款方式 余额宝
+            支付成功 ¥56.78 付款方式 花呗
+            消息
+            """.trimIndent()
+        )
+        assertNull(result)
+    }
+
+    @Test
+    fun `unpaid order detail is not recorded`() {
+        val result = PaymentParser.fromScreen(
+            PaymentParser.ALIPAY_PACKAGE,
+            "订单详情 订单号 20261105001 当前状态 待付款 订单金额 ¥99.00 支付方式 花呗"
+        )
+        assertNull(result)
+    }
+
+    @Test
+    fun `bill list page with several amounts is ignored`() {
+        val result = PaymentParser.fromScreen(
+            PaymentParser.ALIPAY_PACKAGE,
+            "¥12.34 交易成功\n¥56.78 交易成功\n¥90.12 交易成功"
+        )
+        assertNull(result)
+    }
+
+    @Test
+    fun `bill detail prefers the paid amount over the original amount`() {
+        val result = PaymentParser.fromScreen(
+            PaymentParser.WECHAT_PACKAGE,
+            "账单详情 订单金额 ¥100.00 优惠金额 ¥5.00 实付金额 ¥95.00 当前状态 已完成 交易单号 4200001234 支付时间 2026-11-05 10:00"
+        )
+        requireNotNull(result)
+        assertEquals(9500L, result.amountCents)
+    }
+
+    @Test
+    fun `bill detail with order and trade number is not treated as a list`() {
+        val result = PaymentParser.fromScreen(
+            PaymentParser.ALIPAY_PACKAGE,
+            "账单详情 订单号 20261105001 交易单号 202611050011234 订单金额 ¥95.00 当前状态 交易成功"
+        )
+        requireNotNull(result)
+        assertEquals(9500L, result.amountCents)
+    }
+
+    @Test
+    fun `success page prefers the paid amount when a discount comes first`() {
+        val result = PaymentParser.fromScreen(
+            PaymentParser.ALIPAY_PACKAGE,
+            "支付成功 优惠 ¥1.00 实付 ¥12.34 收款方 老王便利店"
+        )
+        requireNotNull(result)
+        assertEquals(1234L, result.amountCents)
+    }
+
+    @Test
+    fun `credit card repayment page is ignored`() {
+        val result = PaymentParser.fromScreen(
+            PaymentParser.ALIPAY_PACKAGE,
+            "信用卡账单详情 本期账单 账单金额 ¥1,234.56 最低还款 ¥123.46 支付方式 自动还款 当前状态 待还款"
+        )
+        assertNull(result)
+    }
+
+    @Test
+    fun `success page may mention the next repayment`() {
+        val result = PaymentParser.fromScreen(
+            PaymentParser.ALIPAY_PACKAGE,
+            "支付成功 ¥12.34 收款方 老王便利店 付款方式 花呗 下月应还 ¥12.34 完成"
+        )
+        requireNotNull(result)
+        assertEquals(1234L, result.amountCents)
+    }
 }

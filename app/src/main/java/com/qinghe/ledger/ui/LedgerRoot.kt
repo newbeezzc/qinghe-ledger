@@ -147,17 +147,21 @@ fun LedgerRoot(editTransactionId: MutableStateFlow<Long?>? = null) {
                 checkingUpdate = true
                 scope.launch {
                     try {
-                        when (val result = UpdateManager.check(repo)) {
+                        when (val result = UpdateManager.check(repo, settings.updateMirror)) {
                             is UpdateCheckResult.Available -> {
                                 updateInfo = result.info
                                 updateError = null
+                                viewModel.markUpdateChecked()
                             }
                             UpdateCheckResult.UpToDate -> {
+                                viewModel.markUpdateChecked()
                                 if (manual) {
                                     snackbarHostState.showSnackbar("已经是最新版本")
                                 }
                             }
                             is UpdateCheckResult.Failure -> {
+                                // Do not stamp the 24-hour interval: a network
+                                // failure should be retried on the next launch.
                                 if (manual) {
                                     snackbarHostState.showSnackbar(result.message)
                                 }
@@ -165,7 +169,6 @@ fun LedgerRoot(editTransactionId: MutableStateFlow<Long?>? = null) {
                         }
                     } finally {
                         checkingUpdate = false
-                        viewModel.markUpdateChecked()
                     }
                 }
             }
@@ -179,7 +182,7 @@ fun LedgerRoot(editTransactionId: MutableStateFlow<Long?>? = null) {
             updateError = null
             scope.launch {
                 try {
-                    val file = UpdateManager.download(context, info)
+                    val file = UpdateManager.download(context, info, settings.updateMirror)
                     val validation = UpdateManager.validateApk(context, file)
                     if (validation != null) {
                         updateError = validation
@@ -350,6 +353,7 @@ fun LedgerRoot(editTransactionId: MutableStateFlow<Long?>? = null) {
                         onOpenRules = { showRules = true },
                         onCheckUpdate = { checkForUpdates(true) },
                         onSetGithubRepo = viewModel::setGithubRepo,
+                        onSetUpdateMirror = viewModel::setUpdateMirror,
                         onToggleAutoCheckUpdate = viewModel::setAutoCheckUpdates
                     )
                 }

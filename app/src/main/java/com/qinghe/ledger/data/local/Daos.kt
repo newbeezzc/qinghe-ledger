@@ -132,10 +132,9 @@ interface TransactionDao {
     @Query(
         """
         SELECT * FROM transactions
-        WHERE source != 'MANUAL'
-          AND amountCents = :amountCents
+        WHERE amountCents = :amountCents
           AND (
-            createdAt BETWEEN :createdFrom AND :createdTo
+            (source != 'MANUAL' AND createdAt BETWEEN :createdFrom AND :createdTo)
             OR occurredAt BETWEEN :occurredFrom AND :occurredTo
           )
         LIMIT 1

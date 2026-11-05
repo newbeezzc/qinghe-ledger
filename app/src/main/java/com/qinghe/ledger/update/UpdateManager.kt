@@ -11,10 +11,16 @@ import android.provider.Settings
 import androidx.core.content.FileProvider
 import com.qinghe.ledger.BuildConfig
 import java.io.File
+import java.io.FileOutputStream
+import java.io.IOException
+import java.io.InputStream
+import java.io.OutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
@@ -40,123 +46,311 @@ sealed interface UpdateInstallResult {
 }
 
 object UpdateManager {
-    suspend fun check(repo: String): UpdateCheckResult = withContext(Dispatchers.IO) {
-        val normalized = repo.trim().trim('/')
-        if (!normalized.matches(Regex("""^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"""))) {
-            return@withContext UpdateCheckResult.Failure("更新源格式应为 GitHub 用户名/仓库名")
+    /**
+     * Fallback download proxies. They are only used when the official GitHub
+     * routes fail or time out. Every downloaded APK is still validated against
+     * the installed app's package name and signing certificate before install,
+     * so a mirror can slow things down but cannot inject a different APK.
+     */
+    private val BUILT_IN_DOWNLOAD_MIRRORS = listOf(
+        "https://ghfast.top/",
+        "https://gh-proxy.com/",
+        "https://ghproxy.net/"
+    )
+
+    // ghfast/ghproxy.net do not proxy api.github.com; gh-proxy does.
+    private val BUILT_IN_API_MIRRORS = listOf("https://gh-proxy.com/")
+
+    private const val MIRROR_PLACEHOLDER = "{url}"
+    private const val CHECK_ATTEMPTS = 1
+    private const val MAX_APK_BYTES = 100L * 1024L * 1024L
+
+    internal data class DownloadSource(
+        val url: String,
+        val apiAsset: Boolean,
+        val attempts: Int = 2
+    )
+
+    suspend fun check(repo: String, mirror: String = ""): UpdateCheckResult =
+        withContext(Dispatchers.IO) {
+            val normalized = repo.trim().trim('/')
+            if (!normalized.matches(Regex("""^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"""))) {
+                return@withContext UpdateCheckResult.Failure("更新源格式应为 GitHub 用户名/仓库名")
+            }
+            val apiUrl = "https://api.github.com/repos/$normalized/releases/latest"
+            val urls = buildCheckUrls(apiUrl, mirror)
+            var lastProblem = "网络错误"
+            for (url in urls) {
+                val attempts = if (url == apiUrl) CHECK_ATTEMPTS else 1
+                repeat(attempts) { attempt ->
+                    try {
+                        val (code, body) = fetchText(url)
+                        when {
+                            code in 200..299 ->
+                                return@withContext parseRelease(normalized, body)
+
+                            // A direct 404 is authoritative; a mirror 404 just
+                            // means that mirror cannot serve the API.
+                            code == 404 && url == apiUrl ->
+                                return@withContext UpdateCheckResult.Failure("仓库或 Release 不存在")
+
+                            code == 403 ->
+                                lastProblem = "GitHub API 访问受限，请稍后再试"
+
+                            else ->
+                                lastProblem = "检查更新失败（HTTP $code）"
+                        }
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (error: Exception) {
+                        lastProblem = error.message ?: "网络错误"
+                    }
+                    if (attempt < attempts - 1) delay(1200L * (attempt + 1))
+                }
+            }
+            UpdateCheckResult.Failure("$lastProblem（已尝试直连和镜像）")
         }
-        try {
-            val connection = openConnection(
-                "https://api.github.com/repos/$normalized/releases/latest",
-                apiRequest = true
+
+    suspend fun download(
+        context: Context,
+        info: UpdateInfo,
+        mirror: String = ""
+    ): File = withContext(Dispatchers.IO) {
+        val directory = File(context.cacheDir, "updates").apply { mkdirs() }
+        directory.listFiles()?.forEach { it.delete() }
+        val safeName = info.assetName
+            .replace(Regex("""[^A-Za-z0-9._-]"""), "_")
+            .ifBlank { "qinghe-update.apk" }
+            .let { if (it.endsWith(".apk", ignoreCase = true)) it else "$it.apk" }
+        val outputFile = File(directory, safeName)
+        val sources = buildDownloadSources(info, mirror)
+        var lastError: Exception? = null
+        for (source in sources) {
+            outputFile.delete()
+            try {
+                downloadWithRetry(source, outputFile, info.sizeBytes)
+                val size = outputFile.length()
+                if (size == 0L) throw IOException("下载的文件为空")
+                if (info.sizeBytes > 0 && size != info.sizeBytes) {
+                    throw IOException("下载不完整（$size/${info.sizeBytes}），将换线路重试")
+                }
+                return@withContext outputFile
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                lastError = error
+                outputFile.delete()
+            }
+        }
+        val suffix = lastError?.message?.takeIf { it.isNotBlank() }?.let { "：$it" }.orEmpty()
+        throw IOException("网络不稳定，已尝试 ${sources.size} 个下载线路仍失败$suffix")
+    }
+
+    private fun parseRelease(repo: String, body: String): UpdateCheckResult {
+        val json = JSONObject(body)
+        val tag = json.optString("tag_name")
+            .trim()
+            .removePrefix("v")
+            .removePrefix("V")
+        if (tag.isBlank()) {
+            return UpdateCheckResult.Failure("Release 缺少版本标签")
+        }
+
+        val assets = json.optJSONArray("assets")
+        var apkUrl: String? = null
+        var apkName: String? = null
+        var apkSize = 0L
+        var apkAssetId = 0L
+        if (assets != null) {
+            for (index in 0 until assets.length()) {
+                val asset = assets.optJSONObject(index) ?: continue
+                val name = asset.optString("name")
+                if (!name.endsWith(".apk", ignoreCase = true)) continue
+                val url = asset.optString("browser_download_url")
+                if (url.isBlank()) continue
+                if (apkUrl == null ||
+                    name.contains("qinghe", ignoreCase = true) ||
+                    name.contains("release", ignoreCase = true)
+                ) {
+                    apkUrl = url
+                    apkName = name
+                    apkSize = asset.optLong("size")
+                    apkAssetId = asset.optLong("id")
+                }
+            }
+        }
+        if (apkUrl == null || apkName == null) {
+            return UpdateCheckResult.Failure("该 Release 没有 APK 附件")
+        }
+        if (apkSize > MAX_APK_BYTES) {
+            return UpdateCheckResult.Failure("APK 附件大小异常，已拒绝下载")
+        }
+        if (compareVersions(tag, BuildConfig.VERSION_NAME) <= 0) {
+            return UpdateCheckResult.UpToDate
+        }
+        return UpdateCheckResult.Available(
+            UpdateInfo(
+                versionName = tag,
+                changelog = json.optString("body").take(4000),
+                downloadUrl = apkUrl,
+                assetName = apkName,
+                sizeBytes = apkSize,
+                apiDownloadUrl = apkAssetId.takeIf { it > 0 }?.let {
+                    "https://api.github.com/repos/$repo/releases/assets/$it"
+                }
             )
+        )
+    }
+
+    private fun fetchText(url: String): Pair<Int, String> {
+        val connection = openConnection(url, apiRequest = true)
+        return try {
             val code = connection.responseCode
             val stream = if (code in 200..299) connection.inputStream else connection.errorStream
             val body = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+            code to body
+        } finally {
             connection.disconnect()
-
-            when (code) {
-                404 -> return@withContext UpdateCheckResult.Failure("仓库或 Release 不存在")
-                403 -> return@withContext UpdateCheckResult.Failure("GitHub API 访问受限，请稍后再试")
-            }
-            if (code !in 200..299) {
-                return@withContext UpdateCheckResult.Failure("检查更新失败（HTTP $code）")
-            }
-
-            val json = JSONObject(body)
-            val tag = json.optString("tag_name")
-                .trim()
-                .removePrefix("v")
-                .removePrefix("V")
-            if (tag.isBlank()) {
-                return@withContext UpdateCheckResult.Failure("Release 缺少版本标签")
-            }
-
-            val assets = json.optJSONArray("assets")
-            var apkUrl: String? = null
-            var apkName: String? = null
-            var apkSize = 0L
-            var apkAssetId = 0L
-            if (assets != null) {
-                for (index in 0 until assets.length()) {
-                    val asset = assets.optJSONObject(index) ?: continue
-                    val name = asset.optString("name")
-                    if (!name.endsWith(".apk", ignoreCase = true)) continue
-                    val url = asset.optString("browser_download_url")
-                    if (url.isBlank()) continue
-                    if (apkUrl == null ||
-                        name.contains("qinghe", ignoreCase = true) ||
-                        name.contains("release", ignoreCase = true)
-                    ) {
-                        apkUrl = url
-                        apkName = name
-                        apkSize = asset.optLong("size")
-                        apkAssetId = asset.optLong("id")
-                    }
-                }
-            }
-            if (apkUrl == null || apkName == null) {
-                return@withContext UpdateCheckResult.Failure("该 Release 没有 APK 附件")
-            }
-            if (compareVersions(tag, BuildConfig.VERSION_NAME) <= 0) {
-                return@withContext UpdateCheckResult.UpToDate
-            }
-            UpdateCheckResult.Available(
-                UpdateInfo(
-                    versionName = tag,
-                    changelog = json.optString("body").take(4000),
-                    downloadUrl = apkUrl,
-                    assetName = apkName,
-                    sizeBytes = apkSize,
-                    apiDownloadUrl = apkAssetId.takeIf { it > 0 }?.let {
-                        "https://api.github.com/repos/$normalized/releases/assets/$it"
-                    }
-                )
-            )
-        } catch (error: Exception) {
-            UpdateCheckResult.Failure(error.message ?: "网络错误")
         }
     }
 
-    suspend fun download(context: Context, info: UpdateInfo): File =
-        withContext(Dispatchers.IO) {
-            val directory = File(context.cacheDir, "updates").apply { mkdirs() }
-            directory.listFiles()?.forEach { it.delete() }
-            val safeName = info.assetName
-                .replace(Regex("""[^A-Za-z0-9._-]"""), "_")
-                .ifBlank { "qinghe-update.apk" }
-                .let { if (it.endsWith(".apk", ignoreCase = true)) it else "$it.apk" }
-            val outputFile = File(directory, safeName)
-            // api.github.com + release-assets.githubusercontent.com is usually reachable
-            // where github.com release downloads are blocked or time out (e.g. mainland China).
-            val candidates = buildList {
-                info.apiDownloadUrl?.let { add(it to true) }
-                add(info.downloadUrl to false)
+    internal fun buildCheckUrls(apiUrl: String, mirror: String): List<String> {
+        val urls = LinkedHashSet<String>()
+        val custom = mirror.trim()
+        if (custom.isNotEmpty()) urls.add(applyMirror(custom, apiUrl))
+        urls.add(apiUrl)
+        BUILT_IN_API_MIRRORS.forEach { urls.add(applyMirror(it, apiUrl)) }
+        return urls.toList()
+    }
+
+    internal fun buildDownloadSources(
+        info: UpdateInfo,
+        mirror: String
+    ): List<DownloadSource> {
+        val sources = LinkedHashMap<String, DownloadSource>()
+        fun add(url: String, apiAsset: Boolean, attempts: Int) {
+            if (url.startsWith("https://") || url.startsWith("http://")) {
+                sources.putIfAbsent(url, DownloadSource(url, apiAsset, attempts))
             }
-            var lastError: Exception? = null
-            for ((url, apiAsset) in candidates) {
-                try {
-                    val connection = openConnection(url, downloadAsset = apiAsset)
-                    val code = connection.responseCode
-                    if (code !in 200..299) {
-                        connection.disconnect()
-                        throw IllegalStateException("下载失败（HTTP $code）")
-                    }
-                    connection.inputStream.use { input ->
-                        outputFile.outputStream().use { output -> input.copyTo(output) }
-                    }
-                    connection.disconnect()
-                    if (!outputFile.exists() || outputFile.length() == 0L) {
-                        throw IllegalStateException("下载的文件为空")
-                    }
-                    return@withContext outputFile
-                } catch (error: Exception) {
-                    outputFile.delete()
-                    lastError = error
+        }
+
+        val custom = mirror.trim()
+        if (custom.isNotEmpty()) {
+            add(applyMirror(custom, info.downloadUrl), apiAsset = false, attempts = 1)
+            info.apiDownloadUrl?.let {
+                add(applyMirror(custom, it), apiAsset = true, attempts = 1)
+            }
+        }
+        // The official asset endpoint redirects to GitHub's CDN; it is the
+        // first choice but often stalls on mainland networks.
+        info.apiDownloadUrl?.let { add(it, apiAsset = true, attempts = 1) }
+        BUILT_IN_DOWNLOAD_MIRRORS.forEach { prefix ->
+            add(applyMirror(prefix, info.downloadUrl), apiAsset = false, attempts = 2)
+        }
+        add(info.downloadUrl, apiAsset = false, attempts = 1)
+        return sources.values.toList()
+    }
+
+    /** Prefixes [url] with a proxy, or substitutes it into a `{url}` template. */
+    internal fun applyMirror(mirror: String, url: String): String {
+        val trimmed = mirror.trim()
+        if (trimmed.isEmpty()) return url
+        if (trimmed.contains(MIRROR_PLACEHOLDER)) {
+            return trimmed.replace(MIRROR_PLACEHOLDER, url)
+        }
+        return if (trimmed.endsWith("/")) "$trimmed$url" else "$trimmed/$url"
+    }
+
+    private suspend fun downloadWithRetry(
+        source: DownloadSource,
+        outputFile: File,
+        expectedSize: Long
+    ) {
+        var lastError: Exception? = null
+        repeat(source.attempts) { attempt ->
+            try {
+                downloadOnce(source, outputFile, expectedSize)
+                return
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                lastError = error
+                if (attempt < source.attempts - 1) {
+                    delay(800L * (attempt + 1))
                 }
             }
-            throw lastError ?: IllegalStateException("下载更新失败")
         }
+        throw lastError ?: IOException("下载失败")
+    }
+
+    private fun downloadOnce(
+        source: DownloadSource,
+        outputFile: File,
+        expectedSize: Long
+    ) {
+        val existing = if (outputFile.exists()) outputFile.length() else 0L
+        if (expectedSize > 0 && existing >= expectedSize) return
+        // Without a known size, resuming could leave a corrupt prefix; restart.
+        if (expectedSize <= 0 && existing > 0L) outputFile.delete()
+        val resumeFrom = if (expectedSize > 0) existing else 0L
+        val connection = openConnection(
+            source.url,
+            downloadAsset = source.apiAsset,
+            rangeFrom = resumeFrom
+        )
+        try {
+            val code = connection.responseCode
+            if (code !in 200..299) {
+                throw IOException("下载失败（HTTP $code）")
+            }
+            val contentType = connection.contentType.orEmpty()
+            if (contentType.startsWith("text/", ignoreCase = true)) {
+                throw IOException("镜像返回了网页而不是 APK")
+            }
+            val append = existing > 0L && code == HttpURLConnection.HTTP_PARTIAL
+            if (existing > 0L && !append) {
+                outputFile.delete()
+            }
+            val alreadyHave = if (append) existing else 0L
+            val allowed = if (expectedSize > 0) {
+                (expectedSize - alreadyHave).coerceAtLeast(0L)
+            } else {
+                MAX_APK_BYTES
+            }
+            connection.inputStream.use { input ->
+                FileOutputStream(outputFile, append).use { output ->
+                    copyBounded(input, output, allowed)
+                }
+            }
+        } finally {
+            connection.disconnect()
+        }
+        val size = outputFile.length()
+        if (size == 0L) throw IOException("下载的文件为空")
+        if (expectedSize > 0 && size < expectedSize) {
+            // Keep the partial file: the retry asks for the remaining bytes.
+            throw IOException("下载不完整（$size/$expectedSize）")
+        }
+        if (expectedSize > 0 && size > expectedSize) {
+            outputFile.delete()
+            throw IOException("下载内容大小异常")
+        }
+    }
+
+    /** Copies the stream, refusing to write more than [maxBytes]. */
+    private fun copyBounded(input: InputStream, output: OutputStream, maxBytes: Long) {
+        val buffer = ByteArray(64 * 1024)
+        var total = 0L
+        while (true) {
+            val read = input.read(buffer)
+            if (read < 0) return
+            total += read
+            if (total > maxBytes) {
+                throw IOException("下载内容超过预期大小")
+            }
+            output.write(buffer, 0, read)
+        }
+    }
 
     fun validateApk(context: Context, file: File): String? {
         val manager = context.packageManager
@@ -268,13 +462,14 @@ object UpdateManager {
     private fun openConnection(
         url: String,
         apiRequest: Boolean = false,
-        downloadAsset: Boolean = false
+        downloadAsset: Boolean = false,
+        rangeFrom: Long = 0L
     ): HttpURLConnection {
         var current = url
         repeat(6) {
             val connection = URL(current).openConnection() as HttpURLConnection
-            connection.connectTimeout = 20_000
-            connection.readTimeout = 60_000
+            connection.connectTimeout = if (apiRequest) 10_000 else 12_000
+            connection.readTimeout = if (apiRequest) 15_000 else 20_000
             connection.instanceFollowRedirects = false
             connection.setRequestProperty("User-Agent", "QingheLedger/${BuildConfig.VERSION_NAME}")
             if (apiRequest) {
@@ -282,6 +477,9 @@ object UpdateManager {
             } else if (downloadAsset) {
                 // Required for the release asset endpoint to redirect to the CDN.
                 connection.setRequestProperty("Accept", "application/octet-stream")
+            }
+            if (rangeFrom > 0L) {
+                connection.setRequestProperty("Range", "bytes=$rangeFrom-")
             }
             val code = connection.responseCode
             if (code in 300..399) {

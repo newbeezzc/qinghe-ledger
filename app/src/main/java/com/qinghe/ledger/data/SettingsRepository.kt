@@ -17,6 +17,7 @@ data class AutoSettings(
     val accessibilityAutoEnabled: Boolean = true,
     val showAutoRecordNotification: Boolean = true,
     val githubRepo: String = DEFAULT_GITHUB_REPO,
+    val updateMirror: String = "",
     val autoCheckUpdates: Boolean = true,
     val lastUpdateCheck: Long = 0L
 )
@@ -32,6 +33,7 @@ class SettingsRepository(private val context: Context) {
         val accessibilityAuto = booleanPreferencesKey("auto_accessibility_enabled")
         val showAutoNotification = booleanPreferencesKey("auto_record_notification")
         val githubRepo = stringPreferencesKey("github_repo")
+        val updateMirror = stringPreferencesKey("update_mirror")
         val autoCheckUpdates = booleanPreferencesKey("auto_check_updates")
         val lastUpdateCheck = longPreferencesKey("last_update_check")
     }
@@ -47,6 +49,7 @@ class SettingsRepository(private val context: Context) {
                 showAutoRecordNotification = preferences[Keys.showAutoNotification] ?: true,
                 githubRepo = preferences[Keys.githubRepo]?.takeIf { it.isNotBlank() }
                     ?: DEFAULT_GITHUB_REPO,
+                updateMirror = preferences[Keys.updateMirror].orEmpty(),
                 autoCheckUpdates = preferences[Keys.autoCheckUpdates] ?: true,
                 lastUpdateCheck = preferences[Keys.lastUpdateCheck] ?: 0L
             )
@@ -66,6 +69,10 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setGithubRepo(repo: String) {
         context.settingsDataStore.edit { it[Keys.githubRepo] = repo.trim() }
+    }
+
+    suspend fun setUpdateMirror(mirror: String) {
+        context.settingsDataStore.edit { it[Keys.updateMirror] = mirror.trim() }
     }
 
     suspend fun setAutoCheckUpdates(enabled: Boolean) {

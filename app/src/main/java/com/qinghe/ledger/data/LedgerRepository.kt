@@ -290,6 +290,12 @@ class LedgerRepository(private val db: AppDatabase) {
     /**
      * Records a payment detected from a notification or accessibility screen.
      * Returns null when the event is a duplicate or cannot be stored.
+     *
+     * Duplicate means the same amount was auto-recorded moments ago (the
+     * notification and screen paths both firing), or any existing record —
+     * including a manual one — has the same amount at the same payment time.
+     * Old bill detail pages are still recognised: they insert only when that
+     * payment is not already in the ledger.
      */
     suspend fun recordAuto(
         pkg: String,

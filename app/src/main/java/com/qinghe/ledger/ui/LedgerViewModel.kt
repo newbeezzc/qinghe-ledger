@@ -228,6 +228,10 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch { settingsRepository.setGithubRepo(repo) }
     }
 
+    fun setUpdateMirror(mirror: String) {
+        viewModelScope.launch { settingsRepository.setUpdateMirror(mirror) }
+    }
+
     fun setAutoCheckUpdates(enabled: Boolean) {
         viewModelScope.launch { settingsRepository.setAutoCheckUpdates(enabled) }
     }
