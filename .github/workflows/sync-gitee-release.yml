@@ -1,10 +1,9 @@
 name: Sync release to Gitee
 
-# Gitee mirror repositories sync code and tags, but NOT GitHub Releases or
-# their APK attachments. This workflow pushes the release commit/tag to Gitee
-# (when the repo is writable), then copies the GitHub Release notes and APK
-# into the matching Gitee Release so the app can prefer Gitee. If the direct
-# push is rejected (read-only mirror), it waits for the mirror to sync.
+# Gitee mirror repositories auto-sync code and tags, but NOT GitHub Releases
+# or their APK attachments. This workflow only copies each published GitHub
+# Release (notes + APK) into the matching Gitee Release so the app can prefer
+# Gitee. It waits for the mirrored tag to appear before creating the release.
 #
 # One-time setup: add a repository secret named GITEE_TOKEN containing a
 # Gitee personal access token with the `projects` scope.
@@ -65,35 +64,6 @@ jobs:
             exit 1
           fi
 
-      - name: Check out the release commit
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ steps.tag.outputs.tag }}
-          fetch-depth: 0
-
-      - name: Push the commit and tag to Gitee
-        env:
-          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
-          TAG: ${{ steps.tag.outputs.tag }}
-        run: |
-          set -euo pipefail
-          cat > /tmp/gitee-askpass <<'EOF'
-          #!/bin/sh
-          case "$1" in
-            *Username*) echo "newbeezzc" ;;
-            *Password*) echo "$GITEE_TOKEN" ;;
-          esac
-          EOF
-          chmod +x /tmp/gitee-askpass
-          export GIT_ASKPASS=/tmp/gitee-askpass GIT_TERMINAL_PROMPT=0
-          if ! git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
-            git tag "$TAG" HEAD
-          fi
-          git push "https://gitee.com/${GITEE_REPO}.git" "HEAD:main" || \
-            echo "::warning::Gitee rejected the direct branch push (read-only mirror?); waiting for the mirror sync."
-          git push "https://gitee.com/${GITEE_REPO}.git" "refs/tags/${TAG}" || \
-            echo "::warning::Gitee rejected the direct tag push; waiting for the mirror sync."
-
       - name: Wait for the Gitee mirror to sync the tag
         id: mirror
         env:
@@ -102,7 +72,7 @@ jobs:
         run: |
           set -euo pipefail
           API="https://gitee.com/api/v5/repos/${GITEE_REPO}"
-          for i in $(seq 1 30); do
+          for i in $(seq 1 60); do
             SHA="$(curl -sS -m 20 -H "Authorization: token ${GITEE_TOKEN}" \
               "${API}/tags?per_page=100" \
               | TAG="$TAG" python3 -c '
@@ -116,10 +86,10 @@ jobs:
               echo "Gitee mirror has ${TAG} at ${SHA}"
               exit 0
             fi
-            echo "Gitee mirror has not synced ${TAG} yet (${i}/30); waiting 20s..."
+            echo "Gitee mirror has not synced ${TAG} yet (${i}/60); waiting 20s..."
             sleep 20
           done
-          echo "::error::Gitee tag ${TAG} not found after 10 minutes. Re-run this workflow after the mirror syncs."
+          echo "::error::Gitee tag ${TAG} not found after 20 minutes. Check that the Gitee mirror auto-sync is enabled, then re-run this workflow."
           exit 1
 
       - name: Download the GitHub release APK
