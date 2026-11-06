@@ -1,37 +1,25 @@
 package com.qinghe.ledger.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.qinghe.ledger.BuildConfig
 import com.qinghe.ledger.data.AutoSettings
-import com.qinghe.ledger.data.DEFAULT_GITEE_REPO
-import com.qinghe.ledger.data.DEFAULT_GITHUB_REPO
 import com.qinghe.ledger.ui.components.GroupedNavRow
 import com.qinghe.ledger.ui.components.GroupedSwitchRow
-import com.qinghe.ledger.ui.components.GroupedValueRow
 import com.qinghe.ledger.ui.components.InfoCard
 import com.qinghe.ledger.ui.components.SectionTitle
 import com.qinghe.ledger.ui.components.SettingsDivider
@@ -46,9 +34,6 @@ fun SettingsScreen(
     onOpenCategories: () -> Unit,
     onOpenRules: () -> Unit,
     onCheckUpdate: () -> Unit,
-    onSetGiteeRepo: (String) -> Unit,
-    onSetGithubRepo: (String) -> Unit,
-    onSetUpdateMirror: (String) -> Unit,
     onToggleAutoCheckUpdate: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -65,9 +50,6 @@ fun SettingsScreen(
         settings.accessibilityAutoEnabled -> "仅页面"
         else -> "已关闭"
     }
-    var showRepoDialog by remember { mutableStateOf(false) }
-    var showGiteeDialog by remember { mutableStateOf(false) }
-    var showMirrorDialog by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -161,37 +143,6 @@ fun SettingsScreen(
                     onCheckedChange = onToggleAutoCheckUpdate,
                     emoji = "🔄"
                 )
-                SettingsDivider()
-                GroupedNavRow(
-                    emoji = "🟢",
-                    title = "Gitee 更新源（默认）",
-                    subtitle = settings.giteeRepo.ifBlank {
-                        "未启用（直接使用 GitHub）"
-                    },
-                    onClick = { showGiteeDialog = true }
-                )
-                SettingsDivider()
-                GroupedNavRow(
-                    emoji = "🐙",
-                    title = "GitHub 备用源",
-                    subtitle = settings.githubRepo.ifBlank { DEFAULT_GITHUB_REPO },
-                    onClick = { showRepoDialog = true }
-                )
-                SettingsDivider()
-                GroupedNavRow(
-                    emoji = "🛰️",
-                    title = "更新镜像",
-                    subtitle = settings.updateMirror.ifBlank {
-                        "直连失败时自动尝试内置镜像"
-                    },
-                    onClick = { showMirrorDialog = true }
-                )
-                SettingsDivider()
-                GroupedValueRow(
-                    emoji = "ℹ️",
-                    title = "版本",
-                    value = BuildConfig.VERSION_NAME
-                )
             }
         }
 
@@ -206,175 +157,4 @@ fun SettingsScreen(
             )
         }
     }
-
-    if (showRepoDialog) {
-        UpdateSourceDialog(
-            title = "GitHub 备用源",
-            current = settings.githubRepo,
-            defaultRepo = DEFAULT_GITHUB_REPO,
-            host = "github.com",
-            restoreDefaultWhenBlank = true,
-            onDismiss = { showRepoDialog = false },
-            onSave = { repo ->
-                onSetGithubRepo(repo)
-                showRepoDialog = false
-            }
-        )
-    }
-
-    if (showGiteeDialog) {
-        UpdateSourceDialog(
-            title = "Gitee 更新源",
-            current = settings.giteeRepo,
-            defaultRepo = DEFAULT_GITEE_REPO,
-            host = "gitee.com",
-            restoreDefaultWhenBlank = false,
-            onDismiss = { showGiteeDialog = false },
-            onSave = { repo ->
-                onSetGiteeRepo(repo)
-                showGiteeDialog = false
-            }
-        )
-    }
-
-    if (showMirrorDialog) {
-        UpdateMirrorDialog(
-            current = settings.updateMirror,
-            onDismiss = { showMirrorDialog = false },
-            onSave = { mirror ->
-                onSetUpdateMirror(mirror)
-                showMirrorDialog = false
-            }
-        )
-    }
-}
-
-@Composable
-private fun UpdateMirrorDialog(
-    current: String,
-    onDismiss: () -> Unit,
-    onSave: (String) -> Unit
-) {
-    var input by remember(current) { mutableStateOf(current) }
-    val normalized = input.trim()
-    val valid = normalized.isEmpty() || (
-        (normalized.startsWith("https://") || normalized.startsWith("http://")) &&
-            !normalized.contains(' ') &&
-            normalized.length <= 200
-        )
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("更新镜像") },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = input,
-                    onValueChange = { if (it.length <= 200) input = it },
-                    label = { Text("镜像前缀或 {url} 模板") },
-                    placeholder = { Text("https://ghfast.top/") },
-                    singleLine = true,
-                    isError = !valid,
-                    supportingText = {
-                        Text(
-                            if (valid) {
-                                "留空则自动尝试内置镜像。可填 https://ghfast.top/ 这类前缀，或 https://proxy/?u={url} 这类模板。"
-                            } else {
-                                "需以 http:// 或 https:// 开头，且不能包含空格"
-                            }
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = "镜像只负责加速下载；安装前仍会校验包名、版本和签名，镜像无法替换成其他 APK。",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                enabled = valid,
-                onClick = { onSave(normalized) }
-            ) { Text("保存") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
-        }
-    )
-}
-
-@Composable
-private fun UpdateSourceDialog(
-    title: String,
-    current: String,
-    defaultRepo: String,
-    host: String,
-    restoreDefaultWhenBlank: Boolean,
-    onDismiss: () -> Unit,
-    onSave: (String) -> Unit
-) {
-    var input by remember(current) { mutableStateOf(current) }
-    val normalized = input.trim()
-        .removePrefix("https://$host/")
-        .removePrefix("http://$host/")
-        .trim('/')
-    val valid = normalized.isBlank() ||
-        normalized.matches(Regex("""^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"""))
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = input,
-                    onValueChange = { if (it.length <= 120) input = it },
-                    label = { Text("用户名/仓库名") },
-                    placeholder = { Text(defaultRepo) },
-                    singleLine = true,
-                    isError = !valid,
-                    supportingText = {
-                        Text(
-                            when {
-                                !valid -> "格式应为 用户名/仓库名，或完整 $host 地址"
-                                host == "gitee.com" ->
-                                    "仓库需公开，并在 Release 中上传 APK 附件；清空即停用 Gitee"
-                                else ->
-                                    "仓库需公开，并在 Release 中上传 APK 附件"
-                            }
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = if (restoreDefaultWhenBlank) {
-                        "默认：https://$host/$defaultRepo（清空即恢复默认）"
-                    } else {
-                        "示例：https://$host/$defaultRepo（清空即停用 Gitee）"
-                    },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = "更新 APK 必须与当前安装包使用同一签名；签名不一致会被拒绝安装。",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                enabled = valid,
-                onClick = { onSave(normalized) }
-            ) { Text("保存") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
-        }
-    )
 }

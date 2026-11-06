@@ -224,18 +224,6 @@ class LedgerViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch { settingsRepository.setShowAutoRecordNotification(enabled) }
     }
 
-    fun setGithubRepo(repo: String) {
-        viewModelScope.launch { settingsRepository.setGithubRepo(repo) }
-    }
-
-    fun setGiteeRepo(repo: String) {
-        viewModelScope.launch { settingsRepository.setGiteeRepo(repo) }
-    }
-
-    fun setUpdateMirror(mirror: String) {
-        viewModelScope.launch { settingsRepository.setUpdateMirror(mirror) }
-    }
-
     fun setAutoCheckUpdates(enabled: Boolean) {
         viewModelScope.launch { settingsRepository.setAutoCheckUpdates(enabled) }
     }

@@ -356,9 +356,6 @@ fun LedgerRoot(editTransactionId: MutableStateFlow<Long?>? = null) {
                         onOpenCategories = { showCategories = true },
                         onOpenRules = { showRules = true },
                         onCheckUpdate = { checkForUpdates(true) },
-                        onSetGiteeRepo = viewModel::setGiteeRepo,
-                        onSetGithubRepo = viewModel::setGithubRepo,
-                        onSetUpdateMirror = viewModel::setUpdateMirror,
                         onToggleAutoCheckUpdate = viewModel::setAutoCheckUpdates
                     )
                 }

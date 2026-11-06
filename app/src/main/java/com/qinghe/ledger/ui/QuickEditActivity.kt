@@ -5,15 +5,22 @@ import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -27,6 +34,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.qinghe.ledger.QingheApp
@@ -52,7 +60,10 @@ class QuickEditActivity : ComponentActivity() {
             finish()
             return
         }
-        enableEdgeToEdge()
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+        )
         setContent {
             QingheTheme {
                 QuickEditHost(
@@ -133,55 +144,77 @@ private fun QuickEditHost(
         return
     }
 
-    AddTransactionScreen(
-        existing = current,
-        categories = categories,
-        accounts = accounts,
-        accountBalances = balances,
-        defaultAccountId = current.accountId,
-        autoConfirm = true,
-        onDismiss = onFinish,
-        onSave = { updated ->
-            scope.launch {
-                runCatching {
-                    repository.updateTransaction(updated)
-                    repository.learnCategoryRule(current, updated)
-                }.onSuccess {
-                    Toast.makeText(context, "已记录", Toast.LENGTH_SHORT).show()
-                    onFinish()
-                }.onFailure {
-                    Toast.makeText(context, "保存失败，请重试", Toast.LENGTH_SHORT).show()
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.36f))
+            .imePadding(),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth(0.94f)
+                .fillMaxHeight(0.5f),
+            shape = RoundedCornerShape(24.dp),
+            tonalElevation = 4.dp,
+            shadowElevation = 12.dp
+        ) {
+            AddTransactionScreen(
+                existing = current,
+                categories = categories,
+                accounts = accounts,
+                accountBalances = balances,
+                defaultAccountId = current.accountId,
+                autoConfirm = true,
+                compact = true,
+                onDismiss = onFinish,
+                onSave = { updated ->
+                    scope.launch {
+                        runCatching {
+                            repository.updateTransaction(updated)
+                            repository.learnCategoryRule(current, updated)
+                        }.onSuccess {
+                            Toast.makeText(context, "已记录", Toast.LENGTH_SHORT).show()
+                            onFinish()
+                        }.onFailure {
+                            Toast.makeText(context, "保存失败，请重试", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                },
+                onDelete = { target ->
+                    scope.launch {
+                        val deleted = repository.deleteAutoTransaction(target.id)
+                        Toast.makeText(
+                            context,
+                            if (deleted) "已取消记录" else "取消失败，请重试",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        if (deleted) onFinish()
+                    }
+                },
+                onValidationError = { message ->
+                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                 }
-            }
-        },
-        onDelete = { target ->
-            scope.launch {
-                val deleted = repository.deleteAutoTransaction(target.id)
-                Toast.makeText(
-                    context,
-                    if (deleted) "已取消记录" else "取消失败，请重试",
-                    Toast.LENGTH_SHORT
-                ).show()
-                if (deleted) onFinish()
-            }
-        },
-        onValidationError = { message ->
-            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+            )
         }
-    )
+    }
 }
 
 @Composable
 private fun LoadingScreen() {
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.36f)),
+        contentAlignment = Alignment.Center
     ) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            tonalElevation = 4.dp,
+            shadowElevation = 10.dp
         ) {
             Column(
+                modifier = Modifier.padding(horizontal = 28.dp, vertical = 22.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {

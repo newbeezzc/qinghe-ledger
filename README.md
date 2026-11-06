@@ -15,7 +15,7 @@
   - 通知监听：识别微信「微信支付」、支付宝、抖音、美团的支付通知
   - 页面识别：识别支付成功页或单笔账单详情页（不依赖 OCR）
   - 自动去重：通知和页面两条路径不会重复入账
-  - 确认页：记账后直接打开与 App 内一致的记账页，金额、分类、账户、备注和支付时间已自动填好；可改分类后点「记录」，或点「取消记录」删除这笔自动账目并返回付款 App。没有悬浮窗权限时回退到通知栏
+  - 确认页：自动记账后在当前付款 App 上弹出一个不超过半屏的悬浮窗，金额、分类、账户、备注和支付时间已自动填好；右下角「确认」保存，右下角「取消」删除这笔自动账目并返回付款 App。没有悬浮窗权限时回退到通知栏
 - **两级分类**：大类 + 小类，内置 16 个大类、50 个小类，可自定义
 - **智能归类**：按用户规则、商户名、商品说明、平台关键词和支付时间自动落到小类
 - **账户**：现金、微信、支付宝、抖音、美团、银行卡，余额随账目自动计算
@@ -44,7 +44,7 @@
 2. **无障碍页面识别**：读取微信 / 支付宝 / 抖音 / 美团的支付成功页或单笔账单详情页。先判断页面结构（成功标题 + 强上下文，或账单详情字段），再读取金额；首页、余额 / 额度 / 收益、账单列表等普通含数字页面不会记账。使用 DFS、关键词搜索、父节点回溯和多次延迟重试，不读取聊天内容，不使用 OCR。
 3. **解析与归类**：`PaymentParser`（纯 Kotlin，可单元测试）提取金额、收支方向、商户和时间；`AutoCategoryClassifier` 按「用户规则 → 商户/商品关键词 → 平台关键词 → 支付时间」选择小类。
 4. **去重与落库**：通知和页面事件会经过同一把互斥锁，同时检查最近入库时间和支付时间窗口，避免重复记录。
-5. **确认页**：自动记账后直接打开完整记账页（分类选择与手动记账完全一致）；点「记录」保存，点「取消记录」删除这笔自动账目；没有悬浮窗权限时回退到高优先级通知。
+5. **确认页**：自动记账后在付款 App 上显示半屏悬浮确认窗（分类选择与手动记账完全一致）；右下角「确认」保存，右下角「取消」删除这笔自动账目；没有悬浮窗权限时回退到高优先级通知。
 
 权限用途：
 
@@ -73,21 +73,21 @@
 从 [GitHub Releases](https://github.com/newbeezzc/qinghe-ledger/releases/latest) 下载最新 APK：
 
 ```
-dist/qinghe-1.0.20.apk
+dist/qinghe-1.0.21.apk
 ```
 
 也可以连接手机后安装：
 
 ```bash
-adb install -r dist/qinghe-1.0.20.apk
+adb install -r dist/qinghe-1.0.21.apk
 ```
 
-安装后在「我的」标题旁可以看到 `v1.0.20 · release`（如果是 `debug`，说明装错了包）。
+安装后在「我的」标题旁可以看到 `v1.0.21 · release`（如果是 `debug`，说明装错了包）。
 
 当前 APK 的 SHA-256：
 
 ```
-0aefab9379c04efe75cdcf46de983cfa0b7d35eeb1c63d43e44e7140e88628d1
+40d5f3bb694430edfe29a368dd41adf1aabb4534789aba98956ea8aacc52684d
 ```
 
 ### 签名说明
@@ -96,9 +96,9 @@ adb install -r dist/qinghe-1.0.20.apk
 
 ### 自动更新
 
-应用默认优先从 `newbeezzc/qinghe-ledger` 的 **Gitee Release** 检查更新（国内访问更稳定）；Gitee 不可用、没有 Release 或没有可下载的 APK 时，自动回退到 GitHub Release。两者都可以在「我的 → 关于与更新」中修改，Gitee 清空即停用并直接使用 GitHub。更新器会校验包名、更高的 versionCode、非 debug 构建和证书一致性。
+应用默认优先从 `newbeezzc/qinghe-ledger` 的 **Gitee Release** 检查更新（国内访问更稳定）；Gitee 不可用、没有 Release 或没有可下载的 APK 时，自动回退到 GitHub Release。更新源内置在应用中，不在「我的」页面显示。更新器会校验包名、更高的 versionCode、非 debug 构建和证书一致性。
 
-GitHub 直连不稳定时，检查会回退到 `gh-proxy.com`，下载会依次尝试官方附件地址和 `ghfast.top`、`gh-proxy.com`、`ghproxy.net` 镜像，并在连接中断后用 HTTP Range 断点续传。也可以在「我的 → 关于与更新 → 更新镜像」里填写自己的代理前缀或 `{url}` 模板；留空则使用内置镜像。镜像只负责传输，安装前的签名校验不变。
+GitHub 直连不稳定时，检查会回退到 `gh-proxy.com`，下载会依次尝试官方附件地址和 `ghfast.top`、`gh-proxy.com`、`ghproxy.net` 镜像，并在连接中断后用 HTTP Range 断点续传。镜像只负责传输，安装前的签名校验不变。
 
 发布 Gitee 版：Gitee 的镜像仓库只同步代码和标签，**不会同步 GitHub Release 和 APK 附件**。仓库内置了 `.github/workflows/sync-gitee-release.yml`，每次 GitHub Release 发布后会把 Release 说明和 APK 自动同步到 `gitee.com/newbeezzc/qinghe-ledger`。只需一次性在 GitHub 仓库的 Actions Secrets 中添加 `GITEE_TOKEN`（Gitee 私人令牌，勾选 `projects` 权限）；旧版本可以在 Actions 里手动运行该工作流补同步。
 
@@ -154,7 +154,7 @@ app/src/main/java/com/qinghe/ledger/
 │   └── PaymentAccessibilityService.kt
 ├── ui/
 │   ├── LedgerRoot.kt            # 底部导航与页面切换
-│   ├── QuickEditActivity.kt    # 自动记账确认页（复用 AddTransactionScreen）
+│   ├── QuickEditActivity.kt    # 自动记账半屏悬浮确认窗（复用 AddTransactionScreen）
 │   ├── LedgerViewModel.kt
 │   ├── components/Common.kt
 │   ├── screens/                 # 明细 / 统计 / 预算 / 我的 / 记一笔 / 管理页

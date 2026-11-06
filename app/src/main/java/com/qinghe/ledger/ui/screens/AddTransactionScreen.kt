@@ -36,6 +36,7 @@ import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -89,7 +90,8 @@ fun AddTransactionScreen(
     onSave: (TransactionEntity) -> Unit,
     onDelete: (TransactionEntity) -> Unit,
     onValidationError: (String) -> Unit,
-    autoConfirm: Boolean = false
+    autoConfirm: Boolean = false,
+    compact: Boolean = false
 ) {
     val context = LocalContext.current
     val initialDateTime = remember(existing) {
@@ -266,9 +268,16 @@ fun AddTransactionScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
-                .navigationBarsPadding()
-                .imePadding()
+                .then(
+                    if (compact) {
+                        Modifier
+                    } else {
+                        Modifier
+                            .statusBarsPadding()
+                            .navigationBarsPadding()
+                            .imePadding()
+                    }
+                )
         ) {
             Row(
                 modifier = Modifier
@@ -285,23 +294,29 @@ fun AddTransactionScreen(
                         existing == null -> "记一笔"
                         else -> "编辑账目"
                     },
-                    style = MaterialTheme.typography.titleLarge,
+                    style = if (compact) {
+                        MaterialTheme.typography.titleMedium
+                    } else {
+                        MaterialTheme.typography.titleLarge
+                    },
                     modifier = Modifier.weight(1f)
                 )
-                if (autoConfirm && existing != null) {
-                    TextButton(onClick = { showDeleteDialog = true }) {
-                        Text(
-                            text = "取消记录",
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
-                } else if (existing != null) {
-                    IconButton(onClick = { showDeleteDialog = true }) {
-                        Icon(
-                            Icons.Rounded.DeleteOutline,
-                            contentDescription = "删除",
-                            tint = MaterialTheme.colorScheme.error
-                        )
+                if (!compact) {
+                    if (autoConfirm && existing != null) {
+                        TextButton(onClick = { showDeleteDialog = true }) {
+                            Text(
+                                text = "取消记录",
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    } else if (existing != null) {
+                        IconButton(onClick = { showDeleteDialog = true }) {
+                            Icon(
+                                Icons.Rounded.DeleteOutline,
+                                contentDescription = "删除",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
                     }
                 }
                 if (existing != null && existing.source != TransactionSource.MANUAL.name) {
@@ -568,7 +583,7 @@ fun AddTransactionScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(214.dp)
+                    .height(if (compact) 150.dp else 214.dp)
                     .padding(horizontal = 16.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -579,7 +594,7 @@ fun AddTransactionScreen(
                     listOf(".", "0", "DEL")
                 )
                 Column(
-                    modifier = Modifier.weight(3f),
+                    modifier = Modifier.weight(if (compact) 1f else 3f),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     rows.forEach { row ->
@@ -618,20 +633,40 @@ fun AddTransactionScreen(
                         }
                     }
                 }
-                Surface(
-                    onClick = { submit() },
-                    shape = RoundedCornerShape(18.dp),
-                    color = MaterialTheme.colorScheme.primary,
+                if (!compact) {
+                    Surface(
+                        onClick = { submit() },
+                        shape = RoundedCornerShape(18.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = if (autoConfirm) "记录" else "保存",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (compact) {
+                Row(
                     modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = if (autoConfirm) "记录" else "保存",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onPrimary
-                        )
+                    TextButton(onClick = { showDeleteDialog = true }) {
+                        Text("取消", color = MaterialTheme.colorScheme.error)
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Button(onClick = { submit() }) {
+                        Text("确认")
                     }
                 }
             }
