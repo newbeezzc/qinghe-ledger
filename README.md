@@ -73,21 +73,21 @@
 从 [GitHub Releases](https://github.com/newbeezzc/qinghe-ledger/releases/latest) 下载最新 APK：
 
 ```
-dist/qinghe-1.0.20.apk
+dist/qinghe-1.0.19.apk
 ```
 
 也可以连接手机后安装：
 
 ```bash
-adb install -r dist/qinghe-1.0.20.apk
+adb install -r dist/qinghe-1.0.19.apk
 ```
 
-安装后在「我的」标题旁可以看到 `v1.0.20 · release`（如果是 `debug`，说明装错了包）。
+安装后在「我的」标题旁可以看到 `v1.0.19 · release`（如果是 `debug`，说明装错了包）。
 
 当前 APK 的 SHA-256：
 
 ```
-0aefab9379c04efe75cdcf46de983cfa0b7d35eeb1c63d43e44e7140e88628d1
+28dc092d8369d848734134a8ec03f8006f983feaa1a6cd07a35ed86d50990ccd
 ```
 
 ### 签名说明
@@ -100,7 +100,7 @@ adb install -r dist/qinghe-1.0.20.apk
 
 GitHub 直连不稳定时，检查会回退到 `gh-proxy.com`，下载会依次尝试官方附件地址和 `ghfast.top`、`gh-proxy.com`、`ghproxy.net` 镜像，并在连接中断后用 HTTP Range 断点续传。也可以在「我的 → 关于与更新 → 更新镜像」里填写自己的代理前缀或 `{url}` 模板；留空则使用内置镜像。镜像只负责传输，安装前的签名校验不变。
 
-发布 Gitee 版：先创建公开仓库并添加 `gitee` remote，把具有 `projects` 权限的 Gitee 令牌写入 `.gitee-token`，然后运行 `scripts/publish-gitee.sh`。`scripts/publish-github.sh` 检测到这两项时也会在 GitHub Release 之后自动同步到 Gitee。
+发布 Gitee 版：Gitee 的镜像仓库只同步代码和标签，**不会同步 GitHub Release 和 APK 附件**。仓库内置了 `.github/workflows/sync-gitee-release.yml`，每次 GitHub Release 发布后会把 Release 说明和 APK 自动同步到 `gitee.com/newbeezzc/qinghe-ledger`。只需一次性在 GitHub 仓库的 Actions Secrets 中添加 `GITEE_TOKEN`（Gitee 私人令牌，勾选 `projects` 权限）；旧版本可以在 Actions 里手动运行该工作流补同步。
 
 如果你 fork 了本项目并发布自己的 APK，请修改 `app/src/main/java/com/qinghe/ledger/data/SettingsRepository.kt` 中的 `DEFAULT_GITEE_REPO` / `DEFAULT_GITHUB_REPO`，并使用自己的签名。
 

@@ -45,7 +45,7 @@ Before delivering an APK:
 1. Bump `versionCode` and `versionName` in `app/build.gradle.kts`.
 2. Do a clean build (`clean :app:assembleRelease`) — repeated incremental packaging has produced a 63 MB APK with ZIP holes; a clean release should stay around 2.7 MB.
 3. Copy to a versioned path, e.g. `dist/qinghe-1.0.9.apk`, remove stale dist APKs, and update the SHA-256 and version in `README.md`.
-4. Publish via `bash scripts/publish-github.sh` (defaults to `newbeezzc/qinghe-ledger`). The script clean-builds, updates README version/SHA-256, **commits and pushes automatically**, then creates the Release with the APK (uses `gh`, else `GITHUB_TOKEN`/`GH_TOKEN`/`.github-token`). If `.gitee-token` and a `gitee` git remote exist, it also mirrors the commit/tag/release/APK to Gitee via `scripts/publish-gitee.sh`.
+4. Publish via `bash scripts/publish-github.sh` (defaults to `newbeezzc/qinghe-ledger`). The script clean-builds, updates README version/SHA-256, **commits and pushes automatically**, then creates the Release with the APK (uses `gh`, else `GITHUB_TOKEN`/`GH_TOKEN`/`.github-token`). The `sync-gitee-release.yml` GitHub Action then mirrors the published Release/APK to Gitee (requires the `GITEE_TOKEN` repository secret).
 
 ## Architecture
 
@@ -96,7 +96,7 @@ Single-module, single-activity Compose app. Manual DI: `QingheApp` creates `di/A
 - New permissions/paths: `REQUEST_INSTALL_PACKAGES`, `FileProvider` authority `${applicationId}.fileprovider`, `res/xml/file_paths.xml` maps `cache/updates`.
 - Auto-check runs at most daily; a failed check does not stamp the timestamp, so the next launch retries.
 - Both release repos must be public; assets are downloaded from `browser_download_url` with redirects followed manually.
-- `scripts/publish-gitee.sh` pushes the commit/tag to the `gitee` remote and creates/replaces the Gitee Release + APK attachment when `.gitee-token` (projects scope) exists. `scripts/publish-github.sh` calls it automatically after the GitHub Release if both `.gitee-token` and a `gitee` remote are present, and a Gitee failure does not fail the GitHub publish.
+- `.github/workflows/sync-gitee-release.yml` runs on `release: published` (and manual `workflow_dispatch`): waits for the Gitee mirror to sync the tag, downloads the APK from the GitHub Release, creates/reuses the Gitee Release, and uploads the APK through `/releases/{id}/attach_files`. Requires the `GITEE_TOKEN` repository secret (Gitee personal access token, `projects` scope). Gitee mirror repositories sync code and tags only, **not** GitHub Releases or their APK attachments.
 
 ## Tests
 
@@ -108,7 +108,7 @@ Single-module, single-activity Compose app. Manual DI: `QingheApp` creates `di/A
 ## Invariants / gotchas
 
 - **README.md is the public GitHub landing page.** Keep personal validation notes and local machine paths out of it; detailed troubleshooting goes in `docs/TROUBLESHOOTING.md`, version history in `docs/release-notes/`, and filing materials in `docs/filing/`.
-- **Keep every project artifact inside the repository.** Never write release notes, APKs, tokens, credentials, or test downloads to `%TEMP%` or anywhere else on C:. Use `docs/release-notes/vX.Y.Z.md` for release notes (the publish script reads it automatically), `dist/archive/` for old APKs, and `local-temp/` for transient helpers — the last two are git-ignored. Credentials stay in `.github-token`, `.gitee-token` and `.git-credentials` at the repo root and are git-ignored.
+- **Keep every project artifact inside the repository.** Never write release notes, APKs, tokens, credentials, or test downloads to `%TEMP%` or anywhere else on C:. Use `docs/release-notes/vX.Y.Z.md` for release notes (the publish script reads it automatically), `dist/archive/` for old APKs, and `local-temp/` for transient helpers — the last two are git-ignored. Credentials stay in `.github-token` and `.git-credentials` at the repo root and are git-ignored; the Gitee token lives only in the `GITEE_TOKEN` GitHub Actions secret.
 - Do not add OCR; the accessibility extraction is intentionally non-OCR.
 - Do not put release notes, "what's new" text, or version-changelog cards into app screens. In-app help text should describe current behavior only; release notes belong in `docs/release-notes/` and the GitHub Release.
 - Do not narrow accessibility event types to only window events; WeChat bill recognition regressed when that was done.

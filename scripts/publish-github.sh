@@ -148,12 +148,3 @@ fi
 echo
 echo "Published v${VERSION} to ${REPO}"
 echo "App update source is built in (${REPO}); tap 检查更新 to install."
-
-# Optional Gitee mirror. Requires a `gitee` remote and .gitee-token; the
-# GitHub release is still valid if this step fails.
-if [[ -f "$ROOT/.gitee-token" ]] && git remote get-url gitee >/dev/null 2>&1; then
-    echo "==> Publishing to Gitee"
-    if ! GITEE_REPO="${GITEE_REPO:-$REPO}" bash "$ROOT/scripts/publish-gitee.sh" "$REPO"; then
-        echo "    Gitee publish failed; the GitHub release is unaffected." >&2
-    fi
-fi

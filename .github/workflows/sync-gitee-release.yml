@@ -1,0 +1,217 @@
+name: Sync release to Gitee
+
+# Gitee mirror repositories sync code and tags, but NOT GitHub Releases or
+# their APK attachments. This workflow pushes the release commit/tag to Gitee
+# (when the repo is writable), then copies the GitHub Release notes and APK
+# into the matching Gitee Release so the app can prefer Gitee. If the direct
+# push is rejected (read-only mirror), it waits for the mirror to sync.
+#
+# One-time setup: add a repository secret named GITEE_TOKEN containing a
+# Gitee personal access token with the `projects` scope.
+#
+# Manual backfill: Actions -> Sync release to Gitee -> Run workflow -> enter
+# the release tag (e.g. v1.0.19).
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to sync (e.g. v1.0.20)"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-gitee-release
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      GITEE_REPO: newbeezzc/qinghe-ledger
+    steps:
+      - name: Resolve tag
+        id: tag
+        env:
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          TAG="${EVENT_TAG:-$INPUT_TAG}"
+          if [ -z "$TAG" ]; then
+            echo "::error::No release tag was provided."
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Verify the Gitee token
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GITEE_TOKEN:-}" ]; then
+            echo "::error::Missing repository secret GITEE_TOKEN (Gitee personal access token with projects scope)."
+            exit 1
+          fi
+          code="$(curl -sS -m 20 -o /dev/null -w '%{http_code}' \
+            -H "Authorization: token ${GITEE_TOKEN}" \
+            "https://gitee.com/api/v5/user")"
+          if [ "$code" != "200" ]; then
+            echo "::error::Gitee token check failed (HTTP ${code}). Create a personal access token with the projects scope."
+            exit 1
+          fi
+
+      - name: Check out the release commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
+          fetch-depth: 0
+
+      - name: Push the commit and tag to Gitee
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          cat > /tmp/gitee-askpass <<'EOF'
+          #!/bin/sh
+          case "$1" in
+            *Username*) echo "newbeezzc" ;;
+            *Password*) echo "$GITEE_TOKEN" ;;
+          esac
+          EOF
+          chmod +x /tmp/gitee-askpass
+          export GIT_ASKPASS=/tmp/gitee-askpass GIT_TERMINAL_PROMPT=0
+          if ! git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            git tag "$TAG" HEAD
+          fi
+          git push "https://gitee.com/${GITEE_REPO}.git" "HEAD:main" || \
+            echo "::warning::Gitee rejected the direct branch push (read-only mirror?); waiting for the mirror sync."
+          git push "https://gitee.com/${GITEE_REPO}.git" "refs/tags/${TAG}" || \
+            echo "::warning::Gitee rejected the direct tag push; waiting for the mirror sync."
+
+      - name: Wait for the Gitee mirror to sync the tag
+        id: mirror
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          API="https://gitee.com/api/v5/repos/${GITEE_REPO}"
+          for i in $(seq 1 30); do
+            SHA="$(curl -sS -m 20 -H "Authorization: token ${GITEE_TOKEN}" \
+              "${API}/tags?per_page=100" \
+              | TAG="$TAG" python3 -c '
+          import json, os, sys
+          raw = sys.stdin.read()
+          tags = json.loads(raw) if raw.strip() else []
+          print(next((t.get("commit", {}).get("sha", "") for t in tags if t.get("name") == os.environ["TAG"]), ""))
+          ' 2>/dev/null || true)"
+            if [ -n "$SHA" ]; then
+              echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+              echo "Gitee mirror has ${TAG} at ${SHA}"
+              exit 0
+            fi
+            echo "Gitee mirror has not synced ${TAG} yet (${i}/30); waiting 20s..."
+            sleep 20
+          done
+          echo "::error::Gitee tag ${TAG} not found after 10 minutes. Re-run this workflow after the mirror syncs."
+          exit 1
+
+      - name: Download the GitHub release APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          gh release download "$TAG" --repo "${{ github.repository }}" --pattern '*.apk' --dir dist
+          test -n "$(ls -1 dist/*.apk 2>/dev/null | head -1)"
+          ls -l dist
+
+      - name: Save the release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release view "$TAG" --repo "${{ github.repository }}" --json body -q .body > /tmp/body.md
+
+      - name: Create or reuse the Gitee release
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          SHA: ${{ steps.mirror.outputs.sha }}
+        run: |
+          set -euo pipefail
+          API="https://gitee.com/api/v5/repos/${GITEE_REPO}"
+          AUTH=(-H "Authorization: token ${GITEE_TOKEN}")
+          RELEASE_ID="$(curl -sS -m 30 "${AUTH[@]}" "$API/releases/tags/${TAG}" \
+            | python3 -c 'import sys,json; print(json.load(sys.stdin).get("id",""))' \
+            2>/dev/null || true)"
+          if [ -z "$RELEASE_ID" ]; then
+            python3 - "$TAG" "$SHA" > /tmp/release.json <<'PY'
+          import json, os, sys
+          tag, sha = sys.argv[1], sys.argv[2]
+          path = "/tmp/body.md"
+          body = open(path, encoding="utf-8").read() if os.path.exists(path) else f"青禾记账 {tag}"
+          print(json.dumps({
+              "tag_name": tag,
+              "name": tag,
+              "body": body,
+              "target_commitish": sha,
+              "prerelease": False,
+          }, ensure_ascii=False))
+          PY
+            RESPONSE="$(curl -sS -m 60 --fail-with-body -X POST "${AUTH[@]}" \
+              -H "Content-Type: application/json" \
+              --data-binary @/tmp/release.json \
+              "$API/releases")"
+            RELEASE_ID="$(printf '%s' "$RESPONSE" \
+              | python3 -c 'import sys,json; print(json.load(sys.stdin).get("id",""))')"
+          fi
+          if [ -z "$RELEASE_ID" ]; then
+            echo "::error::Could not create or find the Gitee release."
+            exit 1
+          fi
+          echo "Gitee release id: ${RELEASE_ID}"
+          echo "RELEASE_ID=$RELEASE_ID" >> "$GITHUB_ENV"
+
+      - name: Upload the APK to Gitee
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: |
+          set -euo pipefail
+          API="https://gitee.com/api/v5/repos/${GITEE_REPO}"
+          AUTH=(-H "Authorization: token ${GITEE_TOKEN}")
+          APK="$(ls -1 dist/*.apk | head -1)"
+          NAME="$(basename "$APK")"
+          EXISTING="$(curl -sS -m 30 "${AUTH[@]}" \
+            "$API/releases/${RELEASE_ID}/attach_files" \
+            | NAME="$NAME" python3 -c '
+          import json, os, sys
+          files = json.load(sys.stdin)
+          print(next((a.get("id") for a in files if a.get("name") == os.environ["NAME"]), ""))
+          ' 2>/dev/null || true)"
+          if [ -n "$EXISTING" ]; then
+            echo "Replacing existing attachment ${EXISTING}"
+            curl -sS -m 30 -X DELETE "${AUTH[@]}" \
+              "$API/releases/${RELEASE_ID}/attach_files/${EXISTING}" >/dev/null || true
+          fi
+          curl -sS -m 300 --fail-with-body -X POST "${AUTH[@]}" \
+            -F "file=@${APK}" \
+            "$API/releases/${RELEASE_ID}/attach_files" > /tmp/upload.json
+          python3 - <<'PY'
+          import json, os
+          uploaded = json.load(open('/tmp/upload.json', encoding='utf-8'))
+          print('uploaded', uploaded.get('name'), uploaded.get('size'), uploaded.get('browser_download_url'))
+          local = os.path.getsize(os.path.join('dist', next(
+              f for f in os.listdir('dist') if f.lower().endswith('.apk')
+          )))
+          if uploaded.get('size') and uploaded['size'] != local:
+              raise SystemExit(f"uploaded size {uploaded['size']} != local {local}")
+          PY

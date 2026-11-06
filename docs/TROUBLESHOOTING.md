@@ -77,7 +77,7 @@
 ## 7. 更新失败
 
 - 更新会优先检查 Gitee Release；Gitee 仓库不存在、没有 Release 或下载失败时，自动回退 GitHub。
-- Gitee 仓库必须公开（需要实名认证），并在 Release 中上传 APK 附件；Gitee 更新源可在「我的 → 关于与更新」中修改，清空即停用并直接使用 GitHub。
+- Gitee 仓库必须公开（需要实名认证），并在 Release 中上传 APK 附件；Gitee 更新源可在「我的 → 关于与更新」中修改，清空即停用并直接使用 GitHub。Gitee Release 由仓库内的 GitHub Actions 工作流在 GitHub 发布后自动同步；如果 Gitee 还没有最新版，App 会回退 GitHub。
 - GitHub 直连不稳定时，检查更新会回退到 `gh-proxy.com` 的 API 镜像；下载会依次尝试官方附件地址和 `ghfast.top`、`gh-proxy.com`、`ghproxy.net`，连接中断后会用 HTTP Range 断点续传。
 - 如果内置镜像都不通，可在「我的 → 关于与更新 → 更新镜像」填写自己的代理前缀（如 `https://ghfast.top/`）或 `{url}` 模板；留空恢复内置镜像。镜像只负责传输，安装前仍会校验包名、版本和签名。
 - 更新 APK 必须与当前安装包使用同一签名，签名不一致会被系统拒绝安装。
