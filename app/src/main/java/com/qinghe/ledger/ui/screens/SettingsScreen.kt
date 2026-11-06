@@ -27,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.qinghe.ledger.BuildConfig
 import com.qinghe.ledger.data.AutoSettings
+import com.qinghe.ledger.data.DEFAULT_GITEE_REPO
 import com.qinghe.ledger.data.DEFAULT_GITHUB_REPO
 import com.qinghe.ledger.ui.components.GroupedNavRow
 import com.qinghe.ledger.ui.components.GroupedSwitchRow
@@ -45,6 +46,7 @@ fun SettingsScreen(
     onOpenCategories: () -> Unit,
     onOpenRules: () -> Unit,
     onCheckUpdate: () -> Unit,
+    onSetGiteeRepo: (String) -> Unit,
     onSetGithubRepo: (String) -> Unit,
     onSetUpdateMirror: (String) -> Unit,
     onToggleAutoCheckUpdate: (Boolean) -> Unit,
@@ -64,6 +66,7 @@ fun SettingsScreen(
         else -> "已关闭"
     }
     var showRepoDialog by remember { mutableStateOf(false) }
+    var showGiteeDialog by remember { mutableStateOf(false) }
     var showMirrorDialog by remember { mutableStateOf(false) }
 
     LazyColumn(
@@ -93,7 +96,7 @@ fun SettingsScreen(
             InfoCard(
                 emoji = "🔒",
                 title = "数据只在本机",
-                message = "账目只保存在这台手机上。联网仅用于检查/下载 GitHub 更新，不上传账单、通知或页面文本。"
+                message = "账目只保存在这台手机上。联网仅用于检查/下载 Gitee / GitHub 更新，不上传账单、通知或页面文本。"
             )
         }
 
@@ -153,15 +156,24 @@ fun SettingsScreen(
                 SettingsDivider()
                 GroupedSwitchRow(
                     title = "启动时自动检查更新",
-                    subtitle = "每天最多检查一次 GitHub Release",
+                    subtitle = "每天最多检查一次 Gitee / GitHub Release",
                     checked = settings.autoCheckUpdates,
                     onCheckedChange = onToggleAutoCheckUpdate,
                     emoji = "🔄"
                 )
                 SettingsDivider()
                 GroupedNavRow(
+                    emoji = "🟢",
+                    title = "Gitee 更新源（默认）",
+                    subtitle = settings.giteeRepo.ifBlank {
+                        "未启用（直接使用 GitHub）"
+                    },
+                    onClick = { showGiteeDialog = true }
+                )
+                SettingsDivider()
+                GroupedNavRow(
                     emoji = "🐙",
-                    title = "GitHub 更新源",
+                    title = "GitHub 备用源",
                     subtitle = settings.githubRepo.ifBlank { DEFAULT_GITHUB_REPO },
                     onClick = { showRepoDialog = true }
                 )
@@ -185,7 +197,7 @@ fun SettingsScreen(
 
         item(key = "footer") {
             Text(
-                text = "青禾记账 · 本地优先 · GitHub 更新",
+                text = "青禾记账 · 本地优先 · Gitee / GitHub 更新",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier
@@ -197,11 +209,30 @@ fun SettingsScreen(
 
     if (showRepoDialog) {
         UpdateSourceDialog(
+            title = "GitHub 备用源",
             current = settings.githubRepo,
+            defaultRepo = DEFAULT_GITHUB_REPO,
+            host = "github.com",
+            restoreDefaultWhenBlank = true,
             onDismiss = { showRepoDialog = false },
             onSave = { repo ->
                 onSetGithubRepo(repo)
                 showRepoDialog = false
+            }
+        )
+    }
+
+    if (showGiteeDialog) {
+        UpdateSourceDialog(
+            title = "Gitee 更新源",
+            current = settings.giteeRepo,
+            defaultRepo = DEFAULT_GITEE_REPO,
+            host = "gitee.com",
+            restoreDefaultWhenBlank = false,
+            onDismiss = { showGiteeDialog = false },
+            onSave = { repo ->
+                onSetGiteeRepo(repo)
+                showGiteeDialog = false
             }
         )
     }
@@ -277,36 +308,42 @@ private fun UpdateMirrorDialog(
 
 @Composable
 private fun UpdateSourceDialog(
+    title: String,
     current: String,
+    defaultRepo: String,
+    host: String,
+    restoreDefaultWhenBlank: Boolean,
     onDismiss: () -> Unit,
     onSave: (String) -> Unit
 ) {
     var input by remember(current) { mutableStateOf(current) }
     val normalized = input.trim()
-        .removePrefix("https://github.com/")
-        .removePrefix("http://github.com/")
+        .removePrefix("https://$host/")
+        .removePrefix("http://$host/")
         .trim('/')
     val valid = normalized.isBlank() ||
         normalized.matches(Regex("""^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"""))
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("GitHub 更新源") },
+        title = { Text(title) },
         text = {
             Column {
                 OutlinedTextField(
                     value = input,
                     onValueChange = { if (it.length <= 120) input = it },
                     label = { Text("用户名/仓库名") },
-                    placeholder = { Text(DEFAULT_GITHUB_REPO) },
+                    placeholder = { Text(defaultRepo) },
                     singleLine = true,
                     isError = !valid,
                     supportingText = {
                         Text(
-                            if (valid) {
-                                "仓库需公开，并在 Release 中上传 APK 附件"
-                            } else {
-                                "格式应为 用户名/仓库名，或完整 GitHub 地址"
+                            when {
+                                !valid -> "格式应为 用户名/仓库名，或完整 $host 地址"
+                                host == "gitee.com" ->
+                                    "仓库需公开，并在 Release 中上传 APK 附件；清空即停用 Gitee"
+                                else ->
+                                    "仓库需公开，并在 Release 中上传 APK 附件"
                             }
                         )
                     },
@@ -314,7 +351,11 @@ private fun UpdateSourceDialog(
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = "默认：https://github.com/$DEFAULT_GITHUB_REPO（清空即恢复默认）",
+                    text = if (restoreDefaultWhenBlank) {
+                        "默认：https://$host/$defaultRepo（清空即恢复默认）"
+                    } else {
+                        "示例：https://$host/$defaultRepo（清空即停用 Gitee）"
+                    },
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

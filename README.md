@@ -22,7 +22,7 @@
 - **统计**：支出 / 收入构成、分类占比、每日柱状图
 - **预算**：月度预算、剩余额度、日均可用、分类进度
 - **明细**：按月查看、按日分组、编辑、长按删除
-- **更新**：通过 GitHub Release 检查并安装更新（直连失败自动切换镜像、断点续传，校验包名、版本号和签名）
+- **更新**：优先从 Gitee Release 检查更新（国内更稳），失败时回退 GitHub；支持镜像、断点续传和签名校验
 
 ## 界面预览
 
@@ -54,7 +54,7 @@
 | 无障碍服务 | 读取微信 / 支付宝 / 抖音 / 美团的支付成功页或账单详情页 |
 | 自动记账弹窗 | 支付后直接打开可修改 / 取消的记账页 |
 | 通知权限 | 自动记账结果提醒 |
-| 网络 | 仅检查 / 下载 GitHub Release 更新（直连失败时经公共镜像下载 APK） |
+| 网络 | 优先检查 / 下载 Gitee Release 更新，失败时回退 GitHub（直连失败时经公共镜像下载 APK） |
 
 **边界**：自动识别不保证 100% 准确。银行 App、云闪付、部分小程序支付、红包等场景可能识别不到；微信、支付宝、抖音、美团改版也可能导致页面识别失效。重要账目请偶尔核对。
 
@@ -63,7 +63,7 @@
 - 账目、分类、账户、预算和规则全部保存在本机 Room 数据库。
 - 不要求注册账号，不收集手机号、位置、通讯录、相册或设备标识。
 - 没有广告、统计分析或第三方数据 SDK。
-- `INTERNET` 权限只用于检查 / 下载 GitHub Release 更新；直连失败时会尝试 `ghfast.top`、`gh-proxy.com`、`ghproxy.net` 等公共镜像下载 APK，请求中不包含账目、通知或页面文本。镜像下载的 APK 安装前仍会校验包名、版本和签名。
+- `INTERNET` 权限只用于检查 / 下载 Gitee 或 GitHub Release 更新；Gitee 不可用时回退 GitHub，GitHub 直连失败时会尝试 `ghfast.top`、`gh-proxy.com`、`ghproxy.net` 等公共镜像下载 APK，请求中不包含账目、通知或页面文本。下载的 APK 安装前仍会校验包名、版本和签名。
 - 关闭自动记账开关或撤销系统授权后，自动记账立即停止。
 
 更完整的说明见 [`docs/privacy-policy.md`](docs/privacy-policy.md)。
@@ -73,21 +73,21 @@
 从 [GitHub Releases](https://github.com/newbeezzc/qinghe-ledger/releases/latest) 下载最新 APK：
 
 ```
-dist/qinghe-1.0.19.apk
+dist/qinghe-1.0.20.apk
 ```
 
 也可以连接手机后安装：
 
 ```bash
-adb install -r dist/qinghe-1.0.19.apk
+adb install -r dist/qinghe-1.0.20.apk
 ```
 
-安装后在「我的」标题旁可以看到 `v1.0.19 · release`（如果是 `debug`，说明装错了包）。
+安装后在「我的」标题旁可以看到 `v1.0.20 · release`（如果是 `debug`，说明装错了包）。
 
 当前 APK 的 SHA-256：
 
 ```
-28dc092d8369d848734134a8ec03f8006f983feaa1a6cd07a35ed86d50990ccd
+0aefab9379c04efe75cdcf46de983cfa0b7d35eeb1c63d43e44e7140e88628d1
 ```
 
 ### 签名说明
@@ -96,11 +96,13 @@ adb install -r dist/qinghe-1.0.19.apk
 
 ### 自动更新
 
-应用默认从 `newbeezzc/qinghe-ledger` 的 GitHub Release 检查更新，可在「我的 → 关于与更新」中修改。更新器会校验包名、更高的 versionCode、非 debug 构建和证书一致性。
+应用默认优先从 `newbeezzc/qinghe-ledger` 的 **Gitee Release** 检查更新（国内访问更稳定）；Gitee 不可用、没有 Release 或没有可下载的 APK 时，自动回退到 GitHub Release。两者都可以在「我的 → 关于与更新」中修改，Gitee 清空即停用并直接使用 GitHub。更新器会校验包名、更高的 versionCode、非 debug 构建和证书一致性。
 
 GitHub 直连不稳定时，检查会回退到 `gh-proxy.com`，下载会依次尝试官方附件地址和 `ghfast.top`、`gh-proxy.com`、`ghproxy.net` 镜像，并在连接中断后用 HTTP Range 断点续传。也可以在「我的 → 关于与更新 → 更新镜像」里填写自己的代理前缀或 `{url}` 模板；留空则使用内置镜像。镜像只负责传输，安装前的签名校验不变。
 
-如果你 fork 了本项目并发布自己的 APK，请修改 `app/src/main/java/com/qinghe/ledger/data/SettingsRepository.kt` 中的 `DEFAULT_GITHUB_REPO`，并使用自己的签名。
+发布 Gitee 版：先创建公开仓库并添加 `gitee` remote，把具有 `projects` 权限的 Gitee 令牌写入 `.gitee-token`，然后运行 `scripts/publish-gitee.sh`。`scripts/publish-github.sh` 检测到这两项时也会在 GitHub Release 之后自动同步到 Gitee。
+
+如果你 fork 了本项目并发布自己的 APK，请修改 `app/src/main/java/com/qinghe/ledger/data/SettingsRepository.kt` 中的 `DEFAULT_GITEE_REPO` / `DEFAULT_GITHUB_REPO`，并使用自己的签名。
 
 ## 从源码构建
 

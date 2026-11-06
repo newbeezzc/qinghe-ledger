@@ -22,6 +22,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 
 data class UpdateInfo(
@@ -30,7 +31,9 @@ data class UpdateInfo(
     val downloadUrl: String,
     val assetName: String,
     val sizeBytes: Long,
-    val apiDownloadUrl: String? = null
+    val apiDownloadUrl: String? = null,
+    val fallbackDownloadUrls: List<String> = emptyList(),
+    val sourceLabel: String = ""
 )
 
 sealed interface UpdateCheckResult {
@@ -71,45 +74,107 @@ object UpdateManager {
         val attempts: Int = 2
     )
 
-    suspend fun check(repo: String, mirror: String = ""): UpdateCheckResult =
-        withContext(Dispatchers.IO) {
-            val normalized = repo.trim().trim('/')
-            if (!normalized.matches(Regex("""^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"""))) {
-                return@withContext UpdateCheckResult.Failure("更新源格式应为 GitHub 用户名/仓库名")
+    /**
+     * Checks Gitee first (stable in mainland China) and falls back to GitHub.
+     * A blank [giteeRepo] disables Gitee and uses GitHub only.
+     */
+    suspend fun check(
+        giteeRepo: String,
+        githubRepo: String,
+        mirror: String = ""
+    ): UpdateCheckResult = withContext(Dispatchers.IO) {
+        val github = normalizeRepo(githubRepo)
+        val gitee = normalizeRepo(giteeRepo)
+        var giteeUpToDate = false
+        var giteeProblem: String? = null
+
+        if (gitee != null) {
+            try {
+                when (val result = checkGitee(gitee, github)) {
+                    is UpdateCheckResult.Available -> return@withContext result
+                    UpdateCheckResult.UpToDate -> giteeUpToDate = true
+                    is UpdateCheckResult.Failure -> giteeProblem = result.message
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                giteeProblem = error.message ?: "网络错误"
             }
-            val apiUrl = "https://api.github.com/repos/$normalized/releases/latest"
-            val urls = buildCheckUrls(apiUrl, mirror)
-            var lastProblem = "网络错误"
-            for (url in urls) {
-                val attempts = if (url == apiUrl) CHECK_ATTEMPTS else 1
-                repeat(attempts) { attempt ->
-                    try {
-                        val (code, body) = fetchText(url)
-                        when {
-                            code in 200..299 ->
-                                return@withContext parseRelease(normalized, body)
+        }
 
-                            // A direct 404 is authoritative; a mirror 404 just
-                            // means that mirror cannot serve the API.
-                            code == 404 && url == apiUrl ->
-                                return@withContext UpdateCheckResult.Failure("仓库或 Release 不存在")
-
-                            code == 403 ->
-                                lastProblem = "GitHub API 访问受限，请稍后再试"
-
-                            else ->
-                                lastProblem = "检查更新失败（HTTP $code）"
-                        }
-                    } catch (error: CancellationException) {
-                        throw error
-                    } catch (error: Exception) {
-                        lastProblem = error.message ?: "网络错误"
-                    }
-                    if (attempt < attempts - 1) delay(1200L * (attempt + 1))
+        if (github != null) {
+            when (val result = checkGithub(github, mirror, gitee)) {
+                is UpdateCheckResult.Available -> return@withContext result
+                UpdateCheckResult.UpToDate -> return@withContext result
+                is UpdateCheckResult.Failure -> {
+                    if (giteeUpToDate) return@withContext UpdateCheckResult.UpToDate
+                    val giteePart = giteeProblem?.let { "Gitee：$it；" }.orEmpty()
+                    return@withContext UpdateCheckResult.Failure(
+                        "${giteePart}GitHub：${result.message}"
+                    )
                 }
             }
-            UpdateCheckResult.Failure("$lastProblem（已尝试直连和镜像）")
         }
+
+        return@withContext when {
+            giteeUpToDate -> UpdateCheckResult.UpToDate
+            giteeProblem != null -> UpdateCheckResult.Failure("Gitee 更新检查失败：$giteeProblem")
+            else -> UpdateCheckResult.Failure("请先配置 Gitee 或 GitHub 更新源")
+        }
+    }
+
+    private suspend fun checkGithub(
+        repo: String,
+        mirror: String,
+        giteeRepo: String?
+    ): UpdateCheckResult {
+        val apiUrl = "https://api.github.com/repos/$repo/releases/latest"
+        val urls = buildCheckUrls(apiUrl, mirror)
+        var lastProblem = "网络错误"
+        for (url in urls) {
+            val attempts = if (url == apiUrl) CHECK_ATTEMPTS else 1
+            repeat(attempts) { attempt ->
+                try {
+                    val (code, body) = fetchText(url)
+                    when {
+                        code in 200..299 ->
+                            return parseGithubRelease(repo, body, giteeRepo)
+
+                        // A direct 404 is authoritative; a mirror 404 just
+                        // means that mirror cannot serve the API.
+                        code == 404 && url == apiUrl ->
+                            return UpdateCheckResult.Failure("仓库或 Release 不存在")
+
+                        code == 403 ->
+                            lastProblem = "GitHub API 访问受限，请稍后再试"
+
+                        else ->
+                            lastProblem = "检查更新失败（HTTP $code）"
+                    }
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    lastProblem = error.message ?: "网络错误"
+                }
+                if (attempt < attempts - 1) delay(1200L * (attempt + 1))
+            }
+        }
+        return UpdateCheckResult.Failure("$lastProblem（已尝试直连和镜像）")
+    }
+
+    private fun checkGitee(
+        repo: String,
+        githubRepo: String?
+    ): UpdateCheckResult {
+        val (code, body) = fetchText(
+            "https://gitee.com/api/v5/repos/$repo/releases/latest"
+        )
+        when (code) {
+            404 -> return UpdateCheckResult.Failure("仓库或 Release 不存在")
+            !in 200..299 -> return UpdateCheckResult.Failure("检查更新失败（HTTP $code）")
+        }
+        return parseGiteeRelease(repo, body, githubRepo)
+    }
 
     suspend fun download(
         context: Context,
@@ -146,7 +211,11 @@ object UpdateManager {
         throw IOException("网络不稳定，已尝试 ${sources.size} 个下载线路仍失败$suffix")
     }
 
-    private fun parseRelease(repo: String, body: String): UpdateCheckResult {
+    private fun parseGithubRelease(
+        repo: String,
+        body: String,
+        giteeRepo: String?
+    ): UpdateCheckResult {
         val json = JSONObject(body)
         val tag = json.optString("tag_name")
             .trim()
@@ -197,10 +266,117 @@ object UpdateManager {
                 sizeBytes = apkSize,
                 apiDownloadUrl = apkAssetId.takeIf { it > 0 }?.let {
                     "https://api.github.com/repos/$repo/releases/assets/$it"
-                }
+                },
+                fallbackDownloadUrls = listOfNotNull(
+                    giteeRepo?.let {
+                        "https://gitee.com/$it/releases/download/v$tag/$apkName"
+                    }
+                ),
+                sourceLabel = "GitHub"
             )
         )
     }
+
+    private fun parseGiteeRelease(
+        repo: String,
+        body: String,
+        githubRepo: String?
+    ): UpdateCheckResult {
+        val json = JSONObject(body)
+        if (json.optBoolean("prerelease")) {
+            return UpdateCheckResult.Failure("最新版本是预发布版，已忽略")
+        }
+        val tag = json.optString("tag_name")
+            .trim()
+            .removePrefix("v")
+            .removePrefix("V")
+        if (tag.isBlank()) {
+            return UpdateCheckResult.Failure("Release 缺少版本标签")
+        }
+        if (compareVersions(tag, BuildConfig.VERSION_NAME) <= 0) {
+            return UpdateCheckResult.UpToDate
+        }
+
+        val assets = json.optJSONArray("assets").toGiteeAssets()
+        // Gitee keeps upload sizes (and sometimes the uploaded files
+        // themselves) on the attach_files endpoint rather than in `assets`.
+        var attachFiles = emptyList<GiteeAsset>()
+        val releaseId = json.optLong("id")
+        if (releaseId > 0) {
+            try {
+                val (code, attachBody) = fetchText(
+                    "https://gitee.com/api/v5/repos/$repo/releases/$releaseId/attach_files"
+                )
+                if (code in 200..299) {
+                    attachFiles = JSONArray(attachBody).toGiteeAssets()
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                // Enrichment is optional; `assets` can still provide a URL.
+            }
+        }
+
+        val apk = pickGiteeApk(assets, attachFiles)
+            ?: return UpdateCheckResult.Failure("该 Release 没有 APK 附件")
+        if (apk.size > MAX_APK_BYTES) {
+            return UpdateCheckResult.Failure("APK 附件大小异常，已拒绝下载")
+        }
+        val fallback = githubRepo?.let {
+            "https://github.com/$it/releases/download/v$tag/${apk.name}"
+        }
+        return UpdateCheckResult.Available(
+            UpdateInfo(
+                versionName = tag,
+                changelog = json.optString("body").take(4000),
+                downloadUrl = apk.url,
+                assetName = apk.name,
+                sizeBytes = apk.size,
+                fallbackDownloadUrls = listOfNotNull(fallback),
+                sourceLabel = "Gitee"
+            )
+        )
+    }
+
+    private fun JSONArray?.toGiteeAssets(): List<GiteeAsset> {
+        if (this == null) return emptyList()
+        return buildList {
+            for (index in 0 until length()) {
+                val item = optJSONObject(index) ?: continue
+                add(
+                    GiteeAsset(
+                        name = item.optString("name"),
+                        url = item.optString("browser_download_url"),
+                        size = item.optLong("size")
+                    )
+                )
+            }
+        }
+    }
+
+    /**
+     * Prefers an uploaded attachment (it carries the size), otherwise the
+     * release `assets` entry. Source zip/tar archives are ignored.
+     */
+    internal fun pickGiteeApk(
+        assets: List<GiteeAsset>,
+        attachFiles: List<GiteeAsset>
+    ): GiteeAsset? {
+        fun GiteeAsset.isApk() =
+            name.endsWith(".apk", ignoreCase = true) && url.isNotBlank()
+
+        val fromAssets = assets.firstOrNull { it.isApk() }
+        val fromAttach = attachFiles.firstOrNull {
+            it.isApk() && (fromAssets == null || it.name == fromAssets.name)
+        }
+        return fromAttach ?: fromAssets
+    }
+
+    internal data class GiteeAsset(
+        val name: String,
+        val url: String,
+        val size: Long
+    )
 
     private fun fetchText(url: String): Pair<Int, String> {
         val connection = openConnection(url, apiRequest = true)
@@ -228,27 +404,63 @@ object UpdateManager {
         mirror: String
     ): List<DownloadSource> {
         val sources = LinkedHashMap<String, DownloadSource>()
-        fun add(url: String, apiAsset: Boolean, attempts: Int) {
+        fun add(url: String, apiAsset: Boolean = false, attempts: Int = 1) {
             if (url.startsWith("https://") || url.startsWith("http://")) {
                 sources.putIfAbsent(url, DownloadSource(url, apiAsset, attempts))
             }
         }
+        fun addGithub(url: String) {
+            val custom = mirror.trim()
+            if (custom.isNotEmpty()) add(applyMirror(custom, url), attempts = 1)
+            add(url, attempts = 1)
+            BUILT_IN_DOWNLOAD_MIRRORS.forEach { add(applyMirror(it, url), attempts = 2) }
+        }
 
-        val custom = mirror.trim()
-        if (custom.isNotEmpty()) {
-            add(applyMirror(custom, info.downloadUrl), apiAsset = false, attempts = 1)
-            info.apiDownloadUrl?.let {
-                add(applyMirror(custom, it), apiAsset = true, attempts = 1)
+        val primary = info.downloadUrl
+        if (isGiteeUrl(primary)) {
+            // Gitee is stable in mainland China; GitHub is only the fallback.
+            add(primary, attempts = 2)
+            info.fallbackDownloadUrls.forEach { url ->
+                if (isGithubUrl(url)) addGithub(url) else add(url, attempts = 2)
+            }
+        } else {
+            val custom = mirror.trim()
+            if (custom.isNotEmpty()) add(applyMirror(custom, primary), attempts = 1)
+            info.apiDownloadUrl?.let { add(it, apiAsset = true, attempts = 1) }
+            BUILT_IN_DOWNLOAD_MIRRORS.forEach { add(applyMirror(it, primary), attempts = 2) }
+            add(primary, attempts = 1)
+            info.fallbackDownloadUrls.forEach { url ->
+                if (isGithubUrl(url)) addGithub(url) else add(url, attempts = 2)
             }
         }
-        // The official asset endpoint redirects to GitHub's CDN; it is the
-        // first choice but often stalls on mainland networks.
-        info.apiDownloadUrl?.let { add(it, apiAsset = true, attempts = 1) }
-        BUILT_IN_DOWNLOAD_MIRRORS.forEach { prefix ->
-            add(applyMirror(prefix, info.downloadUrl), apiAsset = false, attempts = 2)
-        }
-        add(info.downloadUrl, apiAsset = false, attempts = 1)
         return sources.values.toList()
+    }
+
+    private fun isGiteeUrl(url: String): Boolean =
+        hostOf(url)?.let { it == "gitee.com" || it.endsWith(".gitee.com") } == true
+
+    private fun isGithubUrl(url: String): Boolean =
+        hostOf(url)?.let {
+            it == "github.com" || it == "api.github.com" ||
+                it.endsWith(".githubusercontent.com")
+        } == true
+
+    private fun hostOf(url: String): String? =
+        runCatching { URL(url).host.lowercase() }.getOrNull()
+
+    /** Accepts `owner/repo` or a full github.com / gitee.com URL. */
+    private fun normalizeRepo(repo: String): String? {
+        var value = repo.trim().trim('/')
+        value = value
+            .removePrefix("https://github.com/")
+            .removePrefix("http://github.com/")
+            .removePrefix("https://gitee.com/")
+            .removePrefix("http://gitee.com/")
+            .trim('/')
+        if (value.isBlank()) return null
+        return value.takeIf {
+            it.matches(Regex("""^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"""))
+        }
     }
 
     /** Prefixes [url] with a proxy, or substitutes it into a `{url}` template. */

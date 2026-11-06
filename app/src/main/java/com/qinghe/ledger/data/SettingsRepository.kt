@@ -16,13 +16,15 @@ data class AutoSettings(
     val notificationAutoEnabled: Boolean = true,
     val accessibilityAutoEnabled: Boolean = true,
     val showAutoRecordNotification: Boolean = true,
+    val giteeRepo: String = DEFAULT_GITEE_REPO,
     val githubRepo: String = DEFAULT_GITHUB_REPO,
     val updateMirror: String = "",
     val autoCheckUpdates: Boolean = true,
     val lastUpdateCheck: Long = 0L
 )
 
-/** Built-in update source so a fresh install can check updates without manual setup. */
+/** Built-in update sources so a fresh install can check updates without manual setup. */
+const val DEFAULT_GITEE_REPO = "newbeezzc/qinghe-ledger"
 const val DEFAULT_GITHUB_REPO = "newbeezzc/qinghe-ledger"
 
 private val Context.settingsDataStore by preferencesDataStore(name = "settings")
@@ -33,6 +35,7 @@ class SettingsRepository(private val context: Context) {
         val accessibilityAuto = booleanPreferencesKey("auto_accessibility_enabled")
         val showAutoNotification = booleanPreferencesKey("auto_record_notification")
         val githubRepo = stringPreferencesKey("github_repo")
+        val giteeRepo = stringPreferencesKey("gitee_repo")
         val updateMirror = stringPreferencesKey("update_mirror")
         val autoCheckUpdates = booleanPreferencesKey("auto_check_updates")
         val lastUpdateCheck = longPreferencesKey("last_update_check")
@@ -49,6 +52,8 @@ class SettingsRepository(private val context: Context) {
                 showAutoRecordNotification = preferences[Keys.showAutoNotification] ?: true,
                 githubRepo = preferences[Keys.githubRepo]?.takeIf { it.isNotBlank() }
                     ?: DEFAULT_GITHUB_REPO,
+                // A stored blank value disables Gitee and uses GitHub directly.
+                giteeRepo = preferences[Keys.giteeRepo] ?: DEFAULT_GITEE_REPO,
                 updateMirror = preferences[Keys.updateMirror].orEmpty(),
                 autoCheckUpdates = preferences[Keys.autoCheckUpdates] ?: true,
                 lastUpdateCheck = preferences[Keys.lastUpdateCheck] ?: 0L
@@ -69,6 +74,10 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setGithubRepo(repo: String) {
         context.settingsDataStore.edit { it[Keys.githubRepo] = repo.trim() }
+    }
+
+    suspend fun setGiteeRepo(repo: String) {
+        context.settingsDataStore.edit { it[Keys.giteeRepo] = repo.trim() }
     }
 
     suspend fun setUpdateMirror(mirror: String) {

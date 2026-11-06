@@ -137,17 +137,21 @@ fun LedgerRoot(editTransactionId: MutableStateFlow<Long?>? = null) {
             }
         } else {
             val repo = settings.githubRepo
-            if (repo.isBlank()) {
+            if (repo.isBlank() && settings.giteeRepo.isBlank()) {
                 if (manual) {
                     scope.launch {
-                        snackbarHostState.showSnackbar("请先在「我的 → GitHub 更新源」配置仓库")
+                        snackbarHostState.showSnackbar("请先在「我的 → 关于与更新」配置更新源")
                     }
                 }
             } else {
                 checkingUpdate = true
                 scope.launch {
                     try {
-                        when (val result = UpdateManager.check(repo, settings.updateMirror)) {
+                        when (val result = UpdateManager.check(
+                            settings.giteeRepo,
+                            repo,
+                            settings.updateMirror
+                        )) {
                             is UpdateCheckResult.Available -> {
                                 updateInfo = result.info
                                 updateError = null
@@ -209,8 +213,8 @@ fun LedgerRoot(editTransactionId: MutableStateFlow<Long?>? = null) {
         }
     }
 
-    LaunchedEffect(settings.githubRepo, settings.autoCheckUpdates) {
-        if (settings.githubRepo.isNotBlank() &&
+    LaunchedEffect(settings.giteeRepo, settings.githubRepo, settings.autoCheckUpdates) {
+        if ((settings.giteeRepo.isNotBlank() || settings.githubRepo.isNotBlank()) &&
             settings.autoCheckUpdates &&
             System.currentTimeMillis() - settings.lastUpdateCheck > 24L * 60L * 60L * 1000L &&
             updateInfo == null
@@ -352,6 +356,7 @@ fun LedgerRoot(editTransactionId: MutableStateFlow<Long?>? = null) {
                         onOpenCategories = { showCategories = true },
                         onOpenRules = { showRules = true },
                         onCheckUpdate = { checkForUpdates(true) },
+                        onSetGiteeRepo = viewModel::setGiteeRepo,
                         onSetGithubRepo = viewModel::setGithubRepo,
                         onSetUpdateMirror = viewModel::setUpdateMirror,
                         onToggleAutoCheckUpdate = viewModel::setAutoCheckUpdates

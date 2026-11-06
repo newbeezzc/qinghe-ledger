@@ -45,7 +45,7 @@ Before delivering an APK:
 1. Bump `versionCode` and `versionName` in `app/build.gradle.kts`.
 2. Do a clean build (`clean :app:assembleRelease`) — repeated incremental packaging has produced a 63 MB APK with ZIP holes; a clean release should stay around 2.7 MB.
 3. Copy to a versioned path, e.g. `dist/qinghe-1.0.9.apk`, remove stale dist APKs, and update the SHA-256 and version in `README.md`.
-4. Publish via `bash scripts/publish-github.sh` (defaults to `newbeezzc/qinghe-ledger`). The script clean-builds, updates README version/SHA-256, **commits and pushes automatically**, then creates the Release with the APK (uses `gh`, else `GITHUB_TOKEN`/`GH_TOKEN`/`.github-token`).
+4. Publish via `bash scripts/publish-github.sh` (defaults to `newbeezzc/qinghe-ledger`). The script clean-builds, updates README version/SHA-256, **commits and pushes automatically**, then creates the Release with the APK (uses `gh`, else `GITHUB_TOKEN`/`GH_TOKEN`/`.github-token`). If `.gitee-token` and a `gitee` git remote exist, it also mirrors the commit/tag/release/APK to Gitee via `scripts/publish-gitee.sh`.
 
 ## Architecture
 
@@ -56,7 +56,7 @@ Single-module, single-activity Compose app. Manual DI: `QingheApp` creates `di/A
 - `data/local/Entities.kt` — Room entities. Money is always **Long cents**. Room DB is **version 2**; `MIGRATION_1_2` adds nullable `categories.parentId`. Never use destructive migration: user ledgers must survive upgrades.
 - `CategoryEntity.parentId == null` = top-level ("大类"); non-null = subcategory ("小类"). Transactions reference either level. Titles are rendered as `大类-小类`.
 - `LedgerRepository.seedDefaults()` runs on every app start, is idempotent, and must keep adding missing built-in categories/children for existing installs (this is how new subcategories reach old users). It also runs `migrateRetiredMealSubcategories()`: built-in 餐饮-外卖 / 餐饮-咖啡 are removed and their transactions/rules are reassigned (咖啡 → 酒水饮料, 外卖 → 其他). `ensureOtherLast()` keeps 其他 at the end of every subcategory group after any add/update/delete; `sortedKeepingOtherLast()` is unit-tested.
-- `data/SettingsRepository.kt` — DataStore preferences: auto-capture toggles, GitHub update source, auto-check flag, last check timestamp. `DEFAULT_GITHUB_REPO` (`newbeezzc/qinghe-ledger`) is the built-in source; a blank stored value falls back to it, so users never need to type a repo.
+- `data/SettingsRepository.kt` — DataStore preferences: auto-capture toggles, Gitee/GitHub update sources, update mirror, auto-check flag, last check timestamp. `DEFAULT_GITEE_REPO` and `DEFAULT_GITHUB_REPO` are both `newbeezzc/qinghe-ledger`; Gitee is checked first. A blank stored GitHub repo falls back to the default; a blank Gitee repo disables Gitee and uses GitHub directly.
 - `ui/LedgerViewModel.kt` — month selection, Room flows, CRUD, update-setting writes, and `learnCategoryRule` message.
 
 ### Auto-capture pipeline
@@ -84,28 +84,31 @@ Single-module, single-activity Compose app. Manual DI: `QingheApp` creates `di/A
 - Settings header displays `vVERSION · BUILD_TYPE`; keep it visible for APK debugging.
 - The main 「我的」 page is grouped navigation only (自动记账 / 账本 / 关于与更新). Auto-capture permissions, switches and diagnostics live in `AutoSettingsScreen`, a full-screen overlay controlled by `showAutoSettings` in `LedgerRoot`. Use `SettingsGroup` / `GroupedNavRow` / `GroupedSwitchRow` / `GroupedValueRow` from `ui/components/Common.kt`; do not go back to one card per row.
 
-### GitHub updater
+### Updater (Gitee first, GitHub fallback)
 
-- `update/UpdateManager.kt` checks `https://api.github.com/repos/<repo>/releases/latest`, requires a tag `vX.Y.Z`, picks an `.apk` asset, compares versions, downloads, and validates package name, higher `versionCode`, non-debuggable, and certificate match with the installed app.
-- Downloads try the official asset API URL (`api.github.com/.../releases/assets/<id>`, `Accept: application/octet-stream`) first, then built-in mirrors (`ghfast.top`, `gh-proxy.com`, `ghproxy.net`) prefixed onto `browser_download_url`, then `browser_download_url` directly. Mid-download failures retry with HTTP `Range` resume, and the final size must match the release asset size. Check requests fall back from the direct API to a `gh-proxy.com` API mirror. `github.com` release downloads are unreliable on mainland networks while mirrors and the API/CDN usually work.
-- Settings may carry an optional custom update mirror (`update_mirror` in DataStore): a prefix or a `{url}` template, applied to both API and download URLs. Blank falls back to the built-in mirrors. Mirrors are untrusted transport: `validateApk` still enforces package name, higher versionCode, non-debuggable, and certificate match, so a mirror cannot substitute a different APK.
+- `update/UpdateManager.kt` checks Gitee first via `https://gitee.com/api/v5/repos/<giteeRepo>/releases/latest`; when that fails, has no release/APK, or is up to date it best-effort checks GitHub (`https://api.github.com/repos/<githubRepo>/releases/latest`). A newer GitHub release is still offered if Gitee is stale. Both require a `vX.Y.Z` tag and an `.apk` asset; the updater validates package name, higher `versionCode`, non-debuggable, and certificate match with the installed app.
+- Gitee release JSON exposes uploaded files in `assets` and/or `releases/<id>/attach_files`; the latter carries `size`. Download URLs redirect to a signed `foruda.gitee.com` URL and work anonymously. Gitee does not support HTTP Range on that CDN (it returns 200), so retries restart from zero.
+- For a Gitee result, `UpdateInfo.fallbackDownloadUrls` carries a constructed GitHub URL for the same tag/asset name. Gitee URLs are never prefixed with GitHub mirrors; GitHub fallback URLs are tried with the custom mirror (`ghfast.top` etc.) and then directly.
+- For GitHub, downloads try the official asset API URL (`api.github.com/.../releases/assets/<id>`, `Accept: application/octet-stream`) first, then built-in mirrors (`ghfast.top`, `gh-proxy.com`, `ghproxy.net`) prefixed onto `browser_download_url`, then `browser_download_url` directly. Mid-download failures retry with HTTP `Range` resume, and the final size must match the release asset size when known. Check requests fall back from the direct API to a `gh-proxy.com` API mirror.
+- Settings carry a Gitee repo (`gitee_repo`, default `DEFAULT_GITEE_REPO`, blank disables), a GitHub repo (`github_repo`, never blank), and an optional GitHub update mirror (`update_mirror`): a prefix or a `{url}` template. Mirrors are untrusted transport: `validateApk` still enforces package name, higher versionCode, non-debuggable, and certificate match, so a mirror cannot substitute a different APK.
 - `INTERNET` is only for update checks/downloads. No ledger/notification/screen text is uploaded.
 - The updater validates the signing certificate, so **future APKs must be signed with the same key**. Release builds currently use `signingConfigs.getByName("debug")`. Do not switch signing keys without warning the user that an uninstall (data loss) is required.
 - New permissions/paths: `REQUEST_INSTALL_PACKAGES`, `FileProvider` authority `${applicationId}.fileprovider`, `res/xml/file_paths.xml` maps `cache/updates`.
-- Update source is built in (`DEFAULT_GITHUB_REPO`) and overridable in Settings; it can never be blank. Auto-check runs at most daily.
-- GitHub releases must be public; assets are downloaded from `browser_download_url` with redirects followed manually.
+- Auto-check runs at most daily; a failed check does not stamp the timestamp, so the next launch retries.
+- Both release repos must be public; assets are downloaded from `browser_download_url` with redirects followed manually.
+- `scripts/publish-gitee.sh` pushes the commit/tag to the `gitee` remote and creates/replaces the Gitee Release + APK attachment when `.gitee-token` (projects scope) exists. `scripts/publish-github.sh` calls it automatically after the GitHub Release if both `.gitee-token` and a `gitee` remote are present, and a Gitee failure does not fail the GitHub publish.
 
 ## Tests
 
 - `app/src/test/java/com/qinghe/ledger/auto/PaymentParserTest.kt` — notification/screen parsing, false positives, timestamps, categories/notes.
 - `app/src/test/java/com/qinghe/ledger/update/UpdateVersionTest.kt` — semver comparison.
-- `app/src/test/java/com/qinghe/ledger/update/UpdateSourceTest.kt` — mirror prefix/`{url}` handling and download/check candidate ordering.
-- Current expected total: 72 tests (44 parser + 15 classifier + 10 updater + 3 category ordering).
+- `app/src/test/java/com/qinghe/ledger/update/UpdateSourceTest.kt` — mirror prefix/`{url}` handling, Gitee/GitHub candidate ordering, and Gitee APK selection.
+- Current expected total: 77 tests (44 parser + 15 classifier + 15 updater + 3 category ordering).
 
 ## Invariants / gotchas
 
 - **README.md is the public GitHub landing page.** Keep personal validation notes and local machine paths out of it; detailed troubleshooting goes in `docs/TROUBLESHOOTING.md`, version history in `docs/release-notes/`, and filing materials in `docs/filing/`.
-- **Keep every project artifact inside the repository.** Never write release notes, APKs, tokens, credentials, or test downloads to `%TEMP%` or anywhere else on C:. Use `docs/release-notes/vX.Y.Z.md` for release notes (the publish script reads it automatically), `dist/archive/` for old APKs, and `local-temp/` for transient helpers — the last two are git-ignored. Credentials stay in `.github-token` and `.git-credentials` at the repo root and are git-ignored.
+- **Keep every project artifact inside the repository.** Never write release notes, APKs, tokens, credentials, or test downloads to `%TEMP%` or anywhere else on C:. Use `docs/release-notes/vX.Y.Z.md` for release notes (the publish script reads it automatically), `dist/archive/` for old APKs, and `local-temp/` for transient helpers — the last two are git-ignored. Credentials stay in `.github-token`, `.gitee-token` and `.git-credentials` at the repo root and are git-ignored.
 - Do not add OCR; the accessibility extraction is intentionally non-OCR.
 - Do not put release notes, "what's new" text, or version-changelog cards into app screens. In-app help text should describe current behavior only; release notes belong in `docs/release-notes/` and the GitHub Release.
 - Do not narrow accessibility event types to only window events; WeChat bill recognition regressed when that was done.

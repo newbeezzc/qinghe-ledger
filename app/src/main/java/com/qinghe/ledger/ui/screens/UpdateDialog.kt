@@ -44,9 +44,18 @@ fun UpdateDialog(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                if (info.sizeBytes > 0) {
+                val sizeText = if (info.sizeBytes > 0) {
+                    "安装包约 ${String.format("%.1f", info.sizeBytes / 1024f / 1024f)} MB"
+                } else {
+                    null
+                }
+                val sourceText = info.sourceLabel.takeIf { it.isNotBlank() }?.let {
+                    "更新源 $it"
+                }
+                val metaText = listOfNotNull(sizeText, sourceText).joinToString(" · ")
+                if (metaText.isNotBlank()) {
                     Text(
-                        text = "安装包约 ${String.format("%.1f", info.sizeBytes / 1024f / 1024f)} MB",
+                        text = metaText,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
