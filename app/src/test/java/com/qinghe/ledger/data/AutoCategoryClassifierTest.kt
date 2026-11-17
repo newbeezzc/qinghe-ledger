@@ -6,7 +6,9 @@ import com.qinghe.ledger.data.model.TransactionType
 import java.time.LocalDateTime
 import java.time.ZoneId
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AutoCategoryClassifierTest {
@@ -180,5 +182,53 @@ class AutoCategoryClassifierTest {
         assertNotNull(match)
         assertEquals("其他", match?.category?.name)
         assertEquals(null, match?.category?.parentId)
+    }
+
+    @Test
+    fun `learned merchant rule classifies the same store next time`() {
+        val rules = listOf(AutoRuleEntity(keyword = "张记小卖部", categoryId = 105))
+        assertEquals("零食", classify("张记小卖部", rules = rules)?.category?.name)
+    }
+
+    @Test
+    fun `user merchant rule beats a builtin hint`() {
+        val rules = listOf(AutoRuleEntity(keyword = "零食很忙", categoryId = 301))
+        assertEquals("日用", classify("零食很忙", rules = rules)?.category?.name)
+    }
+
+    @Test
+    fun `learned rule matches across branch and company suffixes`() {
+        val rules = listOf(
+            AutoRuleEntity(keyword = "瑞幸咖啡（北京）有限公司", categoryId = 105)
+        )
+        assertEquals("零食", classify("瑞幸咖啡", rules = rules)?.category?.name)
+    }
+
+    @Test
+    fun `merchant naming a category is classified without a rule`() {
+        assertEquals("零食", classify("零食很忙")?.category?.name)
+        assertEquals("零食", classify("赵一鸣零食")?.category?.name)
+    }
+
+    @Test
+    fun `convenience store brands map to daily goods`() {
+        assertEquals("日用", classify("罗森便利店")?.category?.name)
+        assertEquals("日用", classify("美宜佳")?.category?.name)
+    }
+
+    @Test
+    fun `merchant key removes branch and company suffixes`() {
+        assertEquals(
+            "瑞幸咖啡",
+            AutoCategoryClassifier.merchantKey("瑞幸咖啡（北京）有限公司")
+        )
+        assertEquals("麦当劳", AutoCategoryClassifier.merchantKey("麦当劳(万达店)"))
+    }
+
+    @Test
+    fun `generic platform merchant is never learned as a rule`() {
+        assertFalse(AutoCategoryClassifier.isLearnableMerchant("美团外卖"))
+        assertFalse(AutoCategoryClassifier.isLearnableMerchant("支付宝"))
+        assertTrue(AutoCategoryClassifier.isLearnableMerchant("零食很忙"))
     }
 }

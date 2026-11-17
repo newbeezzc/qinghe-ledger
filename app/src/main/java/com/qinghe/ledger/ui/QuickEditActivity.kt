@@ -11,13 +11,15 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -144,17 +146,20 @@ private fun QuickEditHost(
         return
     }
 
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black.copy(alpha = 0.36f))
+            .navigationBarsPadding()
             .imePadding(),
-        contentAlignment = Alignment.Center
+        // Dock the card to the bottom so long category lists are fully usable.
+        contentAlignment = Alignment.BottomCenter
     ) {
         Surface(
             modifier = Modifier
-                .fillMaxWidth(0.94f)
-                .fillMaxHeight(0.5f),
+                .fillMaxWidth(0.96f)
+                .padding(bottom = 10.dp)
+                .heightIn(max = maxHeight * 0.92f),
             shape = RoundedCornerShape(24.dp),
             tonalElevation = 4.dp,
             shadowElevation = 12.dp
@@ -167,14 +172,20 @@ private fun QuickEditHost(
                 defaultAccountId = current.accountId,
                 autoConfirm = true,
                 compact = true,
+                // The amount is already recognised; no keypad by default.
+                showKeypad = false,
                 onDismiss = onFinish,
                 onSave = { updated ->
                     scope.launch {
                         runCatching {
                             repository.updateTransaction(updated)
                             repository.learnCategoryRule(current, updated)
-                        }.onSuccess {
-                            Toast.makeText(context, "已记录", Toast.LENGTH_SHORT).show()
+                        }.onSuccess { learned ->
+                            Toast.makeText(
+                                context,
+                                if (learned) "已记录，并记住该商户分类" else "已记录",
+                                Toast.LENGTH_SHORT
+                            ).show()
                             onFinish()
                         }.onFailure {
                             Toast.makeText(context, "保存失败，请重试", Toast.LENGTH_SHORT).show()

@@ -13,8 +13,8 @@ android {
         applicationId = "com.qinghe.ledger"
         minSdk = 26
         targetSdk = 35
-        versionCode = 22
-        versionName = "1.0.21"
+        versionCode = 23
+        versionName = "1.0.22"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -31,6 +31,23 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+    }
+
+    // Two distribution channels share the same package name and all features.
+    // The only intentional difference is the in-app updater:
+    //   github -> keeps Gitee/GitHub update checks and APK self-install
+    //   huawei -> hides the update entry and drops INTERNET / install-package
+    //             permissions, as required by Huawei AppGallery review policy.
+    flavorDimensions += "channel"
+    productFlavors {
+        create("github") {
+            dimension = "channel"
+            buildConfigField("boolean", "HUAWEI_CHANNEL", "false")
+        }
+        create("huawei") {
+            dimension = "channel"
+            buildConfigField("boolean", "HUAWEI_CHANNEL", "true")
         }
     }
 

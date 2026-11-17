@@ -134,14 +134,33 @@ object PaymentParser {
     )
 
     /**
-     * Amounts that belong to asset/balance widgets rather than to a payment.
-     * Used only when the amount has no adjacent payment evidence.
+     * Discount / promotion wording. When a payment page shows both the
+     * pre-discount total and the discount, the amount that was actually paid is
+     * the total minus the discount — recording the pre-discount total is wrong.
      */
-    private val assetAmountWords = listOf(
-        "余额", "可用", "额度", "总资产", "收益", "积分", "能量",
-        "冻结", "待还", "应还", "还款", "优惠", "立减", "红包",
-        "累计", "转入", "转出", "理财", "基金", "黄金", "保险",
-        "信用", "借呗", "备用金", "分期"
+    private val discountLabels = listOf(
+        "优惠金额", "优惠", "立减", "满减", "减免", "折扣", "抵扣", "已减",
+        "优惠券", "红包抵扣"
+    )
+    private val paidAmountLabels = listOf(
+        "实付金额", "实付款", "实付", "实收金额", "实收款", "实收",
+        "支付金额", "付款金额", "交易金额"
+    )
+    private val preDiscountAmountLabels = listOf(
+        "订单金额", "商品金额", "商品总价", "订单总价", "原价", "总价", "合计金额"
+    )
+
+    /** Discount label immediately followed by an amount, e.g. "优惠 ¥5.00". */
+    private fun isDiscountAmount(line: String): Boolean = discountLabels.any { label ->
+        Regex("""${Regex.escape(label)}[\s:：¥￥−-]*[0-9]""").containsMatchIn(line)
+    }
+
+    /**
+     * Amounts that belong to asset/balance widgets rather than to a payment.
+     * Matched as label + amount so a merchant called "优惠超市" is not skipped.
+     */
+    private val assetAmountLine = Regex(
+        """(?:总资产|可用额度|额度|余额|收益|积分|能量|冻结|待还|应还|还款|红包|累计|转入|转出|理财|基金|黄金|保险|信用|借呗|备用金|分期)(?:金额|额度)?[\s:：¥￥]*[0-9]"""
     )
 
     private val paymentLineWords = successScreenWords + billDetailTitles + listOf(
@@ -158,7 +177,7 @@ object PaymentParser {
         )
     }
     private val genericAmountLabel = Regex(
-        """金额[:：]?\s*[¥￥]?\s*([0-9]{1,7}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)"""
+        """(?<![惠减扣折让])金额[:：]?\s*[¥￥]?\s*([0-9]{1,7}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)"""
     )
 
     private val tradeNoValue = Regex("""交易单号[:：]?\s*([A-Za-z0-9]{4,})""")
@@ -227,10 +246,13 @@ object PaymentParser {
 
         val hasDetailTitle = billDetailTitles.any { combined.contains(it) }
         // Several distinct amounts on one page = a bill/order list, not one
-        // payment. Distinct values keep duplicated accessibility nodes from
+        // payment. Discount lines are excluded: a success page legitimately
+        // shows the original amount + discount + paid amount, which is still
+        // one payment. Distinct values keep duplicated accessibility nodes from
         // inflating the count on a real detail page.
-        val distinctAmounts = amountWithSymbol.findAll(combined)
-            .map { it.groupValues[1] }
+        val distinctAmounts = lines.asSequence()
+            .filterNot { isDiscountAmount(it) }
+            .flatMap { line -> amountWithSymbol.findAll(line).map { it.groupValues[1] } }
             .distinct()
             .count()
         if (distinctAmounts >= 3 && !hasDetailTitle) {
@@ -399,10 +421,38 @@ object PaymentParser {
     }
 
     private fun extractAmount(text: String): Long? {
+        extractDiscountedAmount(text)?.let { return it }
         findCents(amountWithSymbol, text)?.let { return it }
         findCents(amountWithCurrencyCode, text)?.let { return it }
         findCents(amountWithYuan, text)?.let { return it }
         findCents(labeledAmount, text)?.let { return it }
+        return null
+    }
+
+    /**
+     * Discounted payments show the pre-discount total and the discount. The
+     * paid amount is the difference, so never record the pre-discount total.
+     * An explicit 实付 / 支付金额 label always wins.
+     */
+    private fun extractDiscountedAmount(text: String): Long? {
+        if (!hasDiscountAmount(text)) return null
+        labeledCents(text, paidAmountLabels)?.let { return it }
+        val preDiscount = labeledCents(text, preDiscountAmountLabels)
+        val discount = labeledCents(text, discountLabels)
+        if (preDiscount != null && discount != null && preDiscount > discount) {
+            return preDiscount - discount
+        }
+        // No explicit labels: take the first amount that is not itself a
+        // discount, e.g. "支付成功 ¥95.00 优惠 ¥5.00".
+        for (regex in listOf(
+            amountWithSymbol, amountWithCurrencyCode, amountWithYuan, standaloneAmount
+        )) {
+            for (match in regex.findAll(text)) {
+                val prefix = text.substring(maxOf(0, match.range.first - 12), match.range.first)
+                if (discountLabels.any { prefix.contains(it) }) continue
+                centsOf(match.groupValues[1])?.let { return it }
+            }
+        }
         return null
     }
 
@@ -412,6 +462,7 @@ object PaymentParser {
      * describes a balance, credit limit, discount or reward.
      */
     private fun extractScreenAmount(text: String, lines: List<String>): Long? {
+        extractDiscountedScreenAmount(text, lines)?.let { return it }
         for (regex in screenLabeledAmounts) {
             findCents(regex, text)?.let { return it }
         }
@@ -423,19 +474,76 @@ object PaymentParser {
         return null
     }
 
+    /**
+     * Prefer the paid amount on discounted bill / success pages:
+     * 1. an explicit 实付 / 支付金额 label;
+     * 2. the pre-discount total minus the discount (or the displayed net);
+     * 3. otherwise the first amount that is not a discount.
+     */
+    private fun extractDiscountedScreenAmount(text: String, lines: List<String>): Long? {
+        if (!hasDiscountAmount(text)) return null
+        labeledCents(text, paidAmountLabels)?.let { return it }
+        val preDiscount = labeledCents(text, preDiscountAmountLabels)
+        val discount = labeledCents(text, discountLabels)
+        val candidates = collectAmountCandidates(lines)
+        if (preDiscount != null && discount != null && preDiscount > discount) {
+            val net = preDiscount - discount
+            if (candidates.any { it == net }) return net
+            candidates.firstOrNull { it != preDiscount && it != discount }?.let { return it }
+            return net
+        }
+        return candidates.firstOrNull()
+    }
+
+    private fun hasDiscountAmount(text: String): Boolean = discountLabels.any { label ->
+        Regex("""${Regex.escape(label)}[\s:：¥￥−-]*[0-9]""").containsMatchIn(text)
+    }
+
+    private fun labeledCents(text: String, labels: List<String>): Long? {
+        for (label in labels) {
+            val regex = Regex(
+                """${Regex.escape(label)}[:：]?\s*[¥￥]?\s*[-−]?\s*[¥￥]?\s*([0-9]{1,7}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)"""
+            )
+            findCents(regex, text)?.let { return it }
+        }
+        return null
+    }
+
+    private fun collectAmountCandidates(lines: List<String>): List<Long> {
+        val found = mutableListOf<Long>()
+        for (line in lines) {
+            if (isDiscountAmount(line)) continue
+            if (looksLikeAsset(line)) continue
+            for (regex in listOf(
+                amountWithSymbol, amountWithCurrencyCode, standaloneAmount, amountWithYuan
+            )) {
+                found.addAll(findAllCents(regex, line))
+            }
+        }
+        return found.distinct()
+    }
+
     private fun findCentsOnPaymentLines(regex: Regex, lines: List<String>): Long? {
         for (line in lines) {
-            val looksLikeAsset =
-                assetAmountWords.any { line.contains(it) } &&
-                    paymentLineWords.none { line.contains(it) }
-            if (looksLikeAsset) continue
+            if (looksLikeAsset(line)) continue
             findCents(regex, line)?.let { return it }
         }
         return null
     }
 
-    private fun findCents(regex: Regex, text: String): Long? {
-        val raw = regex.find(text)?.groupValues?.getOrNull(1) ?: return null
+    private fun looksLikeAsset(line: String): Boolean =
+        paymentLineWords.none { line.contains(it) } && assetAmountLine.containsMatchIn(line)
+
+    private fun findCents(regex: Regex, text: String): Long? =
+        findAllCents(regex, text).firstOrNull()
+
+    private fun findAllCents(regex: Regex, text: String): List<Long> =
+        regex.findAll(text).mapNotNull { match ->
+            val raw = match.groupValues.getOrNull(1) ?: return@mapNotNull null
+            centsOf(raw)
+        }.toList()
+
+    private fun centsOf(raw: String): Long? {
         val cleaned = raw
             .replace(",", "")
             .trim()

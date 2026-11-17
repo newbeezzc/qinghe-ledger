@@ -1,18 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Build a release APK and publish it to GitHub.
+# Build both channel APKs and publish the GitHub one.
 #
 # Usage: scripts/publish-github.sh [owner/repo]
 #
 # Steps:
-#   1. clean build the release APK (R8, ~2.7 MB)
-#   2. copy it to dist/qinghe-<version>.apk and remove older dist APKs
+#   1. clean build both flavors (R8, ~2.7 MB each):
+#        github -> dist/qinghe-<version>.apk       (published to GitHub)
+#        huawei -> dist/qinghe-<version>-huawei.apk (local only, for AppGallery)
+#   2. remove older dist APKs except the two current ones
 #   3. update the SHA-256 line in README.md
 #   4. git add -A, commit, and push to origin
-#   5. create the GitHub Release v<version> with the APK attached
+#   5. create the GitHub Release v<version> with the GitHub APK attached
 #
-# The commit/push step is automatic: publishing is the "save point" for updates.
+# The Huawei APK is never attached to the GitHub Release: the in-app updater
+# could otherwise pick the wrong asset, and AppGallery builds are uploaded by
+# hand through AGC.
 #
 # Auth: uses `gh` when installed; otherwise reads GITHUB_TOKEN / GH_TOKEN, or a
 # local `.github-token` file (git-ignored).
@@ -33,30 +37,45 @@ if [[ -z "$VERSION" ]]; then
     exit 1
 fi
 
-echo "==> Building release v${VERSION} (versionCode ${VERSION_CODE})"
+echo "==> Building release v${VERSION} (versionCode ${VERSION_CODE}) for both channels"
 if [[ "${SKIP_BUILD:-0}" == "1" ]]; then
-    echo "    SKIP_BUILD=1, reusing app/build/outputs/apk/release/app-release.apk"
+    echo "    SKIP_BUILD=1, reusing github/huawei release APKs"
 else
     if [[ "${OSTYPE:-}" == msys* || "${OSTYPE:-}" == cygwin* ]]; then
-        ./gradlew.bat clean :app:assembleRelease
+        ./gradlew.bat clean :app:assembleGithubRelease :app:assembleHuaweiRelease
     else
-        ./gradlew clean :app:assembleRelease
+        ./gradlew clean :app:assembleGithubRelease :app:assembleHuaweiRelease
     fi
 fi
 
+GITHUB_APK="app/build/outputs/apk/github/release/app-github-release.apk"
+HUAWEI_APK="app/build/outputs/apk/huawei/release/app-huawei-release.apk"
+
 mkdir -p dist
-find dist -maxdepth 1 -name 'qinghe-*.apk' ! -name "qinghe-${VERSION}.apk" -delete
+find dist -maxdepth 1 -name 'qinghe-*.apk' \
+    ! -name "qinghe-${VERSION}.apk" \
+    ! -name "qinghe-${VERSION}-huawei.apk" -delete
 APK="dist/qinghe-${VERSION}.apk"
-cp app/build/outputs/apk/release/app-release.apk "$APK"
+cp "$GITHUB_APK" "$APK"
+HUAWEI_OUT="dist/qinghe-${VERSION}-huawei.apk"
+cp "$HUAWEI_APK" "$HUAWEI_OUT"
 
 SIZE_MB="$(du -m "$APK" | cut -f1)"
 if [[ "$SIZE_MB" -gt 10 ]]; then
     echo "APK is ${SIZE_MB} MB, expected ~3 MB. Aborting (likely a dirty incremental packaging)." >&2
     exit 1
 fi
+HUAWEI_SIZE_MB="$(du -m "$HUAWEI_OUT" | cut -f1)"
+if [[ "$HUAWEI_SIZE_MB" -gt 10 ]]; then
+    echo "Huawei APK is ${HUAWEI_SIZE_MB} MB, expected ~3 MB. Aborting." >&2
+    exit 1
+fi
 
 SHA="$(sha256sum "$APK" | cut -d' ' -f1)"
-echo "==> APK ${APK} (${SIZE_MB} MB) sha256=${SHA}"
+HUAWEI_SHA="$(sha256sum "$HUAWEI_OUT" | cut -d' ' -f1)"
+echo "==> GitHub APK ${APK} (${SIZE_MB} MB) sha256=${SHA}"
+echo "==> Huawei APK ${HUAWEI_OUT} (${HUAWEI_SIZE_MB} MB) sha256=${HUAWEI_SHA}"
+echo "    Huawei APK is for AppGallery upload only; it is intentionally NOT published to GitHub Releases."
 
 # Update README: versioned APK paths, current version line, and the SHA block.
 python - "$VERSION" "$SHA" <<'PY'

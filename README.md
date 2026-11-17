@@ -15,9 +15,9 @@
   - 通知监听：识别微信「微信支付」、支付宝、抖音、美团的支付通知
   - 页面识别：识别支付成功页或单笔账单详情页（不依赖 OCR）
   - 自动去重：通知和页面两条路径不会重复入账
-  - 确认页：自动记账后在当前付款 App 上弹出一个不超过半屏的悬浮窗，金额、分类、账户、备注和支付时间已自动填好；右下角「确认」保存，右下角「取消」删除这笔自动账目并返回付款 App。没有悬浮窗权限时回退到通知栏
+  - 确认页：自动记账后在付款 App 底部弹出确认卡片（可纵向滚动，金额、分类、账户、备注和支付时间已自动填好），默认不显示数字键盘；需要修改金额时点「改金额」再展开。右下角「确认」保存，右下角「取消」删除这笔自动账目并返回付款 App。没有悬浮窗权限时回退到通知栏
 - **两级分类**：大类 + 小类，内置 16 个大类、50 个小类，可自定义
-- **智能归类**：按用户规则、商户名、商品说明、平台关键词和支付时间自动落到小类
+- **智能归类**：按用户规则、商户名、商品说明、平台关键词和支付时间自动落到小类；手动修改一次某商户的分类后，会记住商户与分类的对应关系，下次自动使用
 - **账户**：现金、微信、支付宝、抖音、美团、银行卡，余额随账目自动计算
 - **统计**：支出 / 收入构成、分类占比、每日柱状图
 - **预算**：月度预算、剩余额度、日均可用、分类进度
@@ -41,10 +41,10 @@
 自动记账是可选的，需要你在系统设置中手动授权：
 
 1. **通知监听**：读取微信「微信支付」、支付宝、抖音、美团的支付通知，提取金额、商户和通知时间。
-2. **无障碍页面识别**：读取微信 / 支付宝 / 抖音 / 美团的支付成功页或单笔账单详情页。先判断页面结构（成功标题 + 强上下文，或账单详情字段），再读取金额；首页、余额 / 额度 / 收益、账单列表等普通含数字页面不会记账。使用 DFS、关键词搜索、父节点回溯和多次延迟重试，不读取聊天内容，不使用 OCR。
-3. **解析与归类**：`PaymentParser`（纯 Kotlin，可单元测试）提取金额、收支方向、商户和时间；`AutoCategoryClassifier` 按「用户规则 → 商户/商品关键词 → 平台关键词 → 支付时间」选择小类。
+2. **无障碍页面识别**：读取微信 / 支付宝 / 抖音 / 美团的支付成功页或单笔账单详情页。先判断页面结构（成功标题 + 强上下文，或账单详情字段），再读取金额；首页、余额 / 额度 / 收益、账单列表等普通含数字页面不会记账。使用 DFS、关键词搜索、父节点回溯和多次延迟重试；页面暂时没有文本时会排队重扫并做一次慢速补扫，不读取聊天内容，不使用 OCR。
+3. **解析与归类**：`PaymentParser`（纯 Kotlin，可单元测试）提取金额、收支方向、商户和时间；遇到「优惠 / 立减」等促销时记录实付金额，而不是优惠前金额。`AutoCategoryClassifier` 按「用户规则 → 商户/商品关键词 → 平台关键词 → 支付时间」选择小类；你手动改过一次分类后，会记住该商户，下次自动归类。
 4. **去重与落库**：通知和页面事件会经过同一把互斥锁，同时检查最近入库时间和支付时间窗口，避免重复记录。
-5. **确认页**：自动记账后在付款 App 上显示半屏悬浮确认窗（分类选择与手动记账完全一致）；右下角「确认」保存，右下角「取消」删除这笔自动账目；没有悬浮窗权限时回退到高优先级通知。
+5. **确认页**：自动记账后在付款 App 底部显示确认卡片（分类选择与手动记账完全一致，可滚动，默认不展开数字键盘）；右下角「确认」保存，右下角「取消」删除这笔自动账目；没有悬浮窗权限时回退到高优先级通知。
 
 权限用途：
 
@@ -73,21 +73,21 @@
 从 [GitHub Releases](https://github.com/newbeezzc/qinghe-ledger/releases/latest) 下载最新 APK：
 
 ```
-dist/qinghe-1.0.21.apk
+dist/qinghe-1.0.22.apk
 ```
 
 也可以连接手机后安装：
 
 ```bash
-adb install -r dist/qinghe-1.0.21.apk
+adb install -r dist/qinghe-1.0.22.apk
 ```
 
-安装后在「我的」标题旁可以看到 `v1.0.21 · release`（如果是 `debug`，说明装错了包）。
+安装后在「我的」标题旁可以看到 `v1.0.22 · release`（如果是 `debug`，说明装错了包）。
 
 当前 APK 的 SHA-256：
 
 ```
-40d5f3bb694430edfe29a368dd41adf1aabb4534789aba98956ea8aacc52684d
+618881ac60cb1f5cc9e2f78d13fa881222de5a2124993fc20550c30728423b62
 ```
 
 ### 签名说明
@@ -104,6 +104,17 @@ GitHub 直连不稳定时，检查会回退到 `gh-proxy.com`，下载会依次�
 
 如果你 fork 了本项目并发布自己的 APK，请修改 `app/src/main/java/com/qinghe/ledger/data/SettingsRepository.kt` 中的 `DEFAULT_GITEE_REPO` / `DEFAULT_GITHUB_REPO`，并使用自己的签名。
 
+## 分发渠道
+
+同一个包名、同一套功能，只区分更新方式：
+
+| 渠道 | 应用内更新 | 网络/安装权限 | 用途 |
+| --- | --- | --- | --- |
+| GitHub / Gitee | 保留「检查更新」和自动检查 | 保留 `INTERNET`、`REQUEST_INSTALL_PACKAGES` | 从 GitHub Release 下载安装 |
+| 华为应用市场 | 隐藏「关于与更新」入口，不自动检查 | 不申请 `INTERNET`、`REQUEST_INSTALL_PACKAGES` | 上传 AGC，由应用市场更新 |
+
+两个渠道除更新入口和对应权限外功能完全一致。`scripts/publish-github.sh` 每次发布会同时构建两个包；华为包只留在 `dist/` 供手动上传，不会挂到 GitHub Release。
+
 ## 从源码构建
 
 环境：
@@ -113,23 +124,29 @@ GitHub 直连不稳定时，检查会回退到 `gh-proxy.com`，下载会依次�
 - Gradle 8.9（使用仓库内的 wrapper 即可）
 
 ```bash
-# Debug APK
-./gradlew :app:assembleDebug
+# GitHub 渠道调试包（含应用内更新）
+./gradlew :app:assembleGithubDebug
 
-# R8 release APK
-./gradlew :app:assembleRelease
+# GitHub 渠道 release（含应用内更新）
+./gradlew :app:assembleGithubRelease
+
+# 华为渠道 release（隐藏更新入口，不申请网络权限）
+./gradlew :app:assembleHuaweiRelease
 
 # 单元测试
-./gradlew :app:testDebugUnitTest
+./gradlew :app:testGithubDebugUnitTest
 ```
 
-Windows 使用 `gradlew.bat`。release 输出在 `app/build/outputs/apk/release/app-release.apk`。
+Windows 使用 `gradlew.bat`。输出：
+
+- GitHub：`app/build/outputs/apk/github/release/app-github-release.apk`
+- 华为：`app/build/outputs/apk/huawei/release/app-huawei-release.apk`
 
 > 如果项目路径包含中文，Gradle 的测试进程在 Windows 上可能读不到类路径。可以临时映射一个 ASCII 盘符再跑测试：
 >
 > ```bash
 > subst X: "D:\path\to\qinghe"
-> ./gradlew.bat -p X:\ :app:testDebugUnitTest
+> ./gradlew.bat -p X:\ :app:testGithubDebugUnitTest
 > subst X: /D
 > ```
 
@@ -154,7 +171,7 @@ app/src/main/java/com/qinghe/ledger/
 │   └── PaymentAccessibilityService.kt
 ├── ui/
 │   ├── LedgerRoot.kt            # 底部导航与页面切换
-│   ├── QuickEditActivity.kt    # 自动记账半屏悬浮确认窗（复用 AddTransactionScreen）
+│   ├── QuickEditActivity.kt    # 自动记账底部确认卡片（复用 AddTransactionScreen）
 │   ├── LedgerViewModel.kt
 │   ├── components/Common.kt
 │   ├── screens/                 # 明细 / 统计 / 预算 / 我的 / 记一笔 / 管理页
@@ -172,7 +189,7 @@ app/src/main/java/com/qinghe/ledger/
 ## 测试
 
 ```bash
-./gradlew :app:testDebugUnitTest
+./gradlew :app:testGithubDebugUnitTest
 ```
 
 覆盖支付通知 / 页面解析、收支方向、聊天与账单汇总排除、自动分类（商户 / 商品 / 平台 / 时间 / 规则优先级）、分类排序和版本比较。
@@ -191,7 +208,7 @@ app/src/main/java/com/qinghe/ledger/
 
 欢迎提交 Issue 和 Pull Request。提交前请：
 
-1. 运行 `./gradlew :app:testDebugUnitTest`，保持现有测试通过；
+1. 运行 `./gradlew :app:testGithubDebugUnitTest`，保持现有测试通过；
 2. 修改解析或分类逻辑时补充对应单元测试；
 3. 不要把发布说明、版本更新日志写进 App 界面；
 4. 不要引入 OCR 或上传账目 / 通知 / 页面文本的功能。

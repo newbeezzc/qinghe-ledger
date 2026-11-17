@@ -501,4 +501,102 @@ class PaymentParserTest {
         requireNotNull(result)
         assertEquals(1234L, result.amountCents)
     }
+
+    @Test
+    fun `discounted screen records the paid amount when only the order total is labeled`() {
+        val result = PaymentParser.fromScreen(
+            PaymentParser.WECHAT_PACKAGE,
+            """
+            支付成功
+            商品金额 ¥100.00
+            优惠 ¥5.00
+            当前状态 已完成
+            交易单号 4200001234
+            支付时间 2026-11-05 10:00
+            """.trimIndent()
+        )
+        requireNotNull(result)
+        assertEquals(9500L, result.amountCents)
+    }
+
+    @Test
+    fun `discounted success page with a bare paid amount records the paid amount`() {
+        val result = PaymentParser.fromScreen(
+            PaymentParser.ALIPAY_PACKAGE,
+            """
+            支付成功
+            ¥95.00
+            优惠 ¥5.00
+            收款方 老王便利店
+            完成
+            """.trimIndent()
+        )
+        requireNotNull(result)
+        assertEquals(9500L, result.amountCents)
+    }
+
+    @Test
+    fun `three amounts on a discounted success page are not a bill list`() {
+        val result = PaymentParser.fromScreen(
+            PaymentParser.WECHAT_PACKAGE,
+            """
+            支付成功
+            商品金额 ¥100.00
+            优惠 ¥5.00
+            ¥95.00
+            商户全称 老王便利店
+            完成
+            """.trimIndent()
+        )
+        requireNotNull(result)
+        assertEquals(9500L, result.amountCents)
+    }
+
+    @Test
+    fun `discounted notification records the paid amount`() {
+        val result = PaymentParser.fromNotification(
+            PaymentParser.WECHAT_PACKAGE,
+            "微信支付",
+            "支付成功 ¥95.00 优惠 ¥5.00"
+        )
+        requireNotNull(result)
+        assertEquals(9500L, result.amountCents)
+    }
+
+    @Test
+    fun `discounted notification with order total computes the paid amount`() {
+        val result = PaymentParser.fromNotification(
+            PaymentParser.ALIPAY_PACKAGE,
+            "支付宝",
+            "支付成功 订单金额100元 优惠5元"
+        )
+        requireNotNull(result)
+        assertEquals(9500L, result.amountCents)
+    }
+
+    @Test
+    fun `merchant called discount store is not treated as a discount line`() {
+        val result = PaymentParser.fromScreen(
+            PaymentParser.WECHAT_PACKAGE,
+            "支付成功 ¥25.00 优惠超市 商户全称 优惠超市 交易单号 4200001234 完成"
+        )
+        requireNotNull(result)
+        assertEquals(2500L, result.amountCents)
+    }
+
+    @Test
+    fun `discount amount with a minus sign is excluded`() {
+        val result = PaymentParser.fromScreen(
+            PaymentParser.ALIPAY_PACKAGE,
+            """
+            支付成功
+            ¥28.00
+            优惠 -¥2.00
+            收款方 老王便利店
+            完成
+            """.trimIndent()
+        )
+        requireNotNull(result)
+        assertEquals(2800L, result.amountCents)
+    }
 }

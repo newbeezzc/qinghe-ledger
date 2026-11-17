@@ -253,7 +253,10 @@ class LedgerRepository(private val db: AppDatabase) {
 
     /**
      * When the user corrects the category of an auto-recorded transaction, learn
-     * a keyword rule so the same merchant is classified correctly next time.
+     * merchant → category rules so the same store is classified correctly next
+     * time. Both the raw merchant name and its normalized key (branch / company
+     * suffix removed) are stored, so "瑞幸咖啡(万达店)" and "瑞幸咖啡" match each
+     * other. Platform-only names (美团/淘宝/…) are never learned.
      */
     suspend fun learnCategoryRule(
         previous: TransactionEntity,
@@ -262,27 +265,48 @@ class LedgerRepository(private val db: AppDatabase) {
         if (previous.source == TransactionSource.MANUAL.name) return false
         if (previous.categoryId == updated.categoryId) return false
         val categoryId = updated.categoryId ?: return false
-        val keyword = sequenceOf(
-            updated.merchant,
-            previous.merchant,
-            updated.note,
-            previous.note
-        )
+
+        val merchants = sequenceOf(updated.merchant, previous.merchant)
             .filterNotNull()
             .map { it.trim() }
-            .firstOrNull { it.length in 2..30 }
-            ?: return false
+            .filter { AutoCategoryClassifier.isLearnableMerchant(it) }
+            .toList()
+        val notes = sequenceOf(updated.note, previous.note)
+            .filterNotNull()
+            .map { it.trim() }
+            .filter { it.length in 2..12 }
+            .filter { AutoCategoryClassifier.isLearnableMerchant(it) }
+            .toList()
 
-        val existing = ruleDao.findByKeyword(keyword)
-        if (existing != null) {
-            if (existing.categoryId == categoryId) return false
-            ruleDao.update(existing.copy(categoryId = categoryId))
-        } else {
-            ruleDao.insert(
-                AutoRuleEntity(keyword = keyword, categoryId = categoryId, builtIn = false)
-            )
+        val keywords = buildList {
+            addAll(merchants.take(1))
+            merchants.asSequence()
+                .map { AutoCategoryClassifier.merchantKey(it) }
+                .filter { it.length in 3..30 && AutoCategoryClassifier.isLearnableMerchant(it) }
+                .take(1)
+                .forEach { add(it) }
+            if (isEmpty()) addAll(notes.take(1))
+        }.distinct()
+
+        if (keywords.isEmpty()) return false
+
+        var learned = false
+        keywords.forEach { keyword ->
+            val existing = ruleDao.findByKeyword(keyword)
+            if (existing != null) {
+                if (existing.categoryId != categoryId) {
+                    // A user correction turns a seeded rule into a user rule.
+                    ruleDao.update(existing.copy(categoryId = categoryId, builtIn = false))
+                    learned = true
+                }
+            } else {
+                ruleDao.insert(
+                    AutoRuleEntity(keyword = keyword, categoryId = categoryId, builtIn = false)
+                )
+                learned = true
+            }
         }
-        return true
+        return learned
     }
 
     suspend fun deleteRule(rule: AutoRuleEntity) = ruleDao.delete(rule)
@@ -359,14 +383,27 @@ class LedgerRepository(private val db: AppDatabase) {
         }
         val categories = categoryDao.getAll()
         val categoryById = categories.associateBy { it.id }
-        val category = AutoCategoryClassifier.classify(
+        val classifierMatch = AutoCategoryClassifier.classify(
             type = type,
             merchant = parsed.merchant,
             rawText = parsed.rawText,
             occurredAtMillis = occurredAt,
             categories = categories,
             rules = ruleDao.getAll()
-        )?.category
+        )
+        var category = classifierMatch?.category
+        // Merchant → category memory: if the classifier can only say "其他",
+        // reuse the category the user picked for this merchant before.
+        val merchantKey = parsed.merchant?.trim().orEmpty()
+        if ((category == null || category.name == "其他") &&
+            merchantKey.length >= 2 &&
+            AutoCategoryClassifier.isLearnableMerchant(merchantKey)
+        ) {
+            category = transactionDao.findRecentCategoryIdsForKey(merchantKey)
+                .mapNotNull { categoryById[it] }
+                .firstOrNull { it.type == type.name && it.name != "其他" }
+                ?: category
+        }
 
         val categoryPath = category?.let { item ->
             val parent = item.parentId?.let { categoryById[it] }

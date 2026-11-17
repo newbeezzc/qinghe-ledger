@@ -220,7 +220,11 @@ fun AutoSettingsScreen(
 
                 item(key = "auto-footer") {
                     Text(
-                        text = "解析全部在本机完成；应用仅在检查更新时访问 Gitee / GitHub。",
+                        text = if (BuildConfig.HUAWEI_CHANNEL) {
+                            "解析全部在本机完成；本版本不联网。"
+                        } else {
+                            "解析全部在本机完成；应用仅在检查更新时访问 Gitee / GitHub。"
+                        },
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 8.dp, start = 4.dp)
@@ -239,7 +243,9 @@ fun AutoSettingsScreen(
                     "1. 通知监听：读取微信「微信支付」和支付宝的支付通知，提取金额与商户。\n\n" +
                         "2. 页面识别：只在你手动开启无障碍权限后，读取微信、支付宝、抖音、美团的支付成功页或单笔账单详情页。应用会先确认页面结构再读取金额：支付成功页需要成功标题 + 金额 + 强上下文（完成、交易单号、收款方等），账单详情页需要详情标题或交易单号 + 多个详情字段；首页、余额 / 额度 / 收益、账单列表等普通页面不会记账；聊天内容不会被记录。\n\n" +
                         "3. 自动记录会按商户名、商品说明和规则归入小类，并可在明细里随时修改或删除。\n\n" +
-                        "所有解析都在本机完成；应用仅在检查更新时访问 Gitee / GitHub。自动识别仍可能有误，请偶尔核对账目。"
+                        "所有解析都在本机完成；" +
+                        (if (BuildConfig.HUAWEI_CHANNEL) "本版本不联网。" else "应用仅在检查更新时访问 Gitee / GitHub。") +
+                        "自动识别仍可能有误，请偶尔核对账目。"
                 )
             },
             confirmButton = {
@@ -312,7 +318,7 @@ private fun DiagnosticsDialog(
 ) {
     val context = LocalContext.current
     val copyText = buildString {
-        appendLine("青禾记账 ${BuildConfig.VERSION_NAME}")
+        appendLine("青禾自动记账 ${BuildConfig.VERSION_NAME}")
         appendLine("Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
         appendLine("${Build.MANUFACTURER} ${Build.MODEL}")
         appendLine("微信版本：$wechatVersion")
@@ -399,7 +405,7 @@ private fun DiagnosticsDialog(
                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE)
                         as? ClipboardManager
                     clipboard?.setPrimaryClip(
-                        ClipData.newPlainText("青禾记账诊断", copyText)
+                        ClipData.newPlainText("青禾自动记账诊断", copyText)
                     )
                     Toast.makeText(context, "诊断信息已复制", Toast.LENGTH_SHORT).show()
                 }

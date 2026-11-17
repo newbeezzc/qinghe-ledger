@@ -34,6 +34,18 @@ class PaymentAccessibilityService : AccessibilityService() {
     private var lastRecordedAt: Long = 0L
     private var lastScanStartedAt: Long = 0L
 
+    // A payment page can open while an earlier retry chain is still running.
+    // Remember the newest event and rescan after the chain instead of dropping
+    // it: WeChat often emits no further event once the bill page is drawn.
+    private var pendingRescan: Boolean = false
+    private var pendingSource: AccessibilityNodeInfo? = null
+    private var pendingEventText: String = ""
+
+    private data class ScanOutcome(
+        val sawText: Boolean,
+        val recorded: Boolean
+    )
+
     override fun onServiceConnected() {
         super.onServiceConnected()
         CaptureDiagnostics.setAccessibilityConnected(true)
@@ -64,20 +76,67 @@ class PaymentAccessibilityService : AccessibilityService() {
             else -> return
         }
 
-        // Let the current retry chain finish before starting another one.
-        if (scanJob?.isActive == true) return
+        // Queue the newest event instead of dropping it while a retry chain is
+        // active; otherwise a bill page opened mid-chain could never be read.
+        if (scanJob?.isActive == true) {
+            pendingRescan = true
+            pendingSource = runCatching { event.source }.getOrNull()
+            pendingEventText = if (eventPackage == pkg) eventTextOf(event) else ""
+            return
+        }
         val now = System.currentTimeMillis()
         if (now - lastScanStartedAt < SCAN_THROTTLE_MS) return
         lastScanStartedAt = now
 
         val firstSource = runCatching { event.source }.getOrNull()
-        val firstEventText = if (eventPackage == pkg) {
-            event.text?.joinToString(" ") { it?.toString().orEmpty() }.orEmpty()
-        } else {
-            ""
+        val firstEventText = if (eventPackage == pkg) eventTextOf(event) else ""
+        startScan(pkg, firstSource, firstEventText)
+    }
+
+    private fun eventTextOf(event: AccessibilityEvent): String = buildList {
+        event.text?.forEach { text ->
+            text?.toString()?.takeIf { it.isNotBlank() }?.let { add(it) }
         }
+        event.contentDescription?.toString()?.takeIf { it.isNotBlank() }?.let { add(it) }
+    }.joinToString(" ")
+
+    private fun startScan(
+        pkg: String,
+        source: AccessibilityNodeInfo?,
+        eventText: String
+    ) {
         scanJob = scope.launch {
-            scanPage(pkg, firstSource, firstEventText)
+            val outcome = scanPage(pkg, source, eventText)
+            if (outcome.recorded) {
+                pendingRescan = false
+                pendingSource = null
+                pendingEventText = ""
+                return@launch
+            }
+
+            if (pendingRescan) {
+                val nextSource = pendingSource
+                val nextText = pendingEventText
+                pendingRescan = false
+                pendingSource = null
+                pendingEventText = ""
+                delay(RESCAN_DELAY_MS)
+                if (AppVisibility.isForeground) return@launch
+                if (isPageStillRelevant(pkg)) {
+                    scanPage(pkg, nextSource, nextText)
+                }
+                return@launch
+            }
+
+            if (!outcome.sawText) {
+                // A WebView / RecyclerView bill page can take longer than the
+                // retry chain to expose any text. Give it one slow follow-up.
+                delay(SLOW_RETRY_MS)
+                if (AppVisibility.isForeground) return@launch
+                if (isPageStillRelevant(pkg)) {
+                    scanPage(pkg, null, "")
+                }
+            }
         }
     }
 
@@ -85,24 +144,23 @@ class PaymentAccessibilityService : AccessibilityService() {
         pkg: String,
         firstSource: AccessibilityNodeInfo?,
         firstEventText: String
-    ) {
+    ): ScanOutcome {
+        var sawText = firstEventText.isNotBlank()
         for (index in RETRY_DELAYS.indices) {
-            if (AppVisibility.isForeground) return
+            if (AppVisibility.isForeground) return ScanOutcome(sawText, false)
             if (index > 0) {
                 delay(RETRY_DELAYS[index] - RETRY_DELAYS[index - 1])
             }
-            if (!isPageStillRelevant(pkg)) return
+            if (!isPageStillRelevant(pkg)) return ScanOutcome(sawText, false)
 
-            val roots = currentRoots(pkg)
+            val roots = currentRoots(pkg, firstSource)
             val textBuilder = StringBuilder()
-            if (index == 0) {
-                if (firstEventText.isNotBlank()) {
-                    textBuilder.append(firstEventText).append('\n')
-                }
-                addRootText(firstSource, pkg, textBuilder)
+            if (index == 0 && firstEventText.isNotBlank()) {
+                textBuilder.append(firstEventText).append('\n')
             }
             roots.forEach { addRootText(it, pkg, textBuilder) }
-            var text = normalizeLines(textBuilder.toString())
+            var text = normalizeLines(textBuilder.toString()).take(MAX_SCREEN_TEXT)
+            if (text.isNotBlank()) sawText = true
             var analysis = PaymentParser.analyzeScreen(pkg, text)
             var usedTargeted = false
 
@@ -110,7 +168,7 @@ class PaymentAccessibilityService : AccessibilityService() {
                 val targeted = collectTargetedText(roots)
                 if (targeted.isNotBlank()) {
                     usedTargeted = true
-                    text = normalizeLines("$text\n$targeted")
+                    text = normalizeLines("$text\n$targeted").take(MAX_SCREEN_TEXT)
                     analysis = PaymentParser.analyzeScreen(pkg, text)
                 }
             }
@@ -119,7 +177,9 @@ class PaymentAccessibilityService : AccessibilityService() {
             if (parsed != null) {
                 val signature = "$pkg|${text.hashCode()}"
                 val now = System.currentTimeMillis()
-                if (signature == lastSignature && now - lastRecordedAt < 60_000L) return
+                if (signature == lastSignature && now - lastRecordedAt < 60_000L) {
+                    return ScanOutcome(true, true)
+                }
                 lastSignature = signature
                 lastRecordedAt = now
                 CaptureDiagnostics.recordScreen(
@@ -134,13 +194,13 @@ class PaymentAccessibilityService : AccessibilityService() {
                     TAG,
                     "$pkg ${analysis.reason} attempt=${index + 1} chars=${text.length} text=${text.take(300)}"
                 )
-                val app = application as? QingheApp ?: return
+                val app = application as? QingheApp ?: return ScanOutcome(sawText, false)
                 app.container.autoRecorder.handle(
                     pkg = pkg,
                     parsed = parsed,
                     source = TransactionSource.ACCESSIBILITY
                 )
-                return
+                return ScanOutcome(true, true)
             }
 
             if (index == 0 || text.isNotBlank()) {
@@ -158,6 +218,7 @@ class PaymentAccessibilityService : AccessibilityService() {
                 )
             }
         }
+        return ScanOutcome(sawText, false)
     }
 
     private fun isPageStillRelevant(pkg: String): Boolean {
@@ -168,7 +229,10 @@ class PaymentAccessibilityService : AccessibilityService() {
         }.getOrDefault(false)
     }
 
-    private fun currentRoots(pkg: String): List<AccessibilityNodeInfo> {
+    private fun currentRoots(
+        pkg: String,
+        extra: AccessibilityNodeInfo? = null
+    ): List<AccessibilityNodeInfo> {
         val roots = mutableListOf<AccessibilityNodeInfo>()
         val seen = HashSet<Int>()
 
@@ -181,6 +245,7 @@ class PaymentAccessibilityService : AccessibilityService() {
         }
 
         add(runCatching { rootInActiveWindow }.getOrNull())
+        add(extra)
         runCatching { windows?.forEach { add(it.root) } }
         return roots
     }
@@ -193,7 +258,14 @@ class PaymentAccessibilityService : AccessibilityService() {
         if (root == null) return
         val nodePackage = runCatching { root.packageName?.toString() }.getOrNull()
         if (nodePackage != null && nodePackage != pkg) return
-        collectVisibleText(root, out, maxNodes = 1200)
+        // Each window gets its own budget: a text-heavy chat list must not
+        // consume a shared cap and hide the bill-detail window.
+        val rootText = StringBuilder()
+        collectVisibleText(root, rootText, maxNodes = 1600, maxChars = ROOT_TEXT_BUDGET)
+        if (rootText.isNotEmpty()) {
+            out.append(rootText)
+            if (!rootText.endsWith("\n")) out.append('\n')
+        }
     }
 
     /**
@@ -229,13 +301,14 @@ class PaymentAccessibilityService : AccessibilityService() {
     private fun collectVisibleText(
         root: AccessibilityNodeInfo,
         out: StringBuilder,
-        maxNodes: Int
+        maxNodes: Int,
+        maxChars: Int = ROOT_TEXT_BUDGET
     ) {
         runCatching { root.refresh() }
         val queue = ArrayDeque<AccessibilityNodeInfo>()
         queue.add(root)
         var visited = 0
-        while (queue.isNotEmpty() && visited < maxNodes && out.length < 6000) {
+        while (queue.isNotEmpty() && visited < maxNodes && out.length < maxChars) {
             val node = queue.removeFirst()
             visited++
             node.text?.toString()?.takeIf { it.isNotBlank() }?.let {
@@ -284,13 +357,21 @@ class PaymentAccessibilityService : AccessibilityService() {
 
     override fun onInterrupt() {
         scanJob?.cancel()
+        clearPendingScan()
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
         scanJob?.cancel()
+        clearPendingScan()
         CaptureDiagnostics.setAccessibilityConnected(false)
         Log.d(TAG, "accessibility service unbound")
         return super.onUnbind(intent)
+    }
+
+    private fun clearPendingScan() {
+        pendingRescan = false
+        pendingSource = null
+        pendingEventText = ""
     }
 
     override fun onDestroy() {
@@ -303,11 +384,16 @@ class PaymentAccessibilityService : AccessibilityService() {
     companion object {
         private const val TAG = "QingheA11y"
         private const val SCAN_THROTTLE_MS = 400L
-        private val RETRY_DELAYS = longArrayOf(0, 800, 2000, 3500)
+        private const val RESCAN_DELAY_MS = 250L
+        private const val SLOW_RETRY_MS = 5_000L
+        private const val MAX_SCREEN_TEXT = 20_000
+        private const val ROOT_TEXT_BUDGET = 8_000
+        private val RETRY_DELAYS = longArrayOf(0, 600, 1_500, 3_000, 5_000, 7_500)
         private val TARGET_KEYWORDS = listOf(
             "交易单号", "支付时间", "付款时间", "交易时间",
             "商户全称", "商户名称", "当前状态", "支付方式",
-            "付款方式", "收款方", "订单号", "金额", "¥", "￥"
+            "付款方式", "收款方", "订单号", "金额", "¥", "￥",
+            "支付成功", "已完成", "账单详情", "订单详情", "完成"
         )
     }
 }

@@ -55,6 +55,7 @@ import com.qinghe.ledger.ui.screens.CategoryManagerScreen
 import com.qinghe.ledger.ui.screens.HomeScreen
 import com.qinghe.ledger.ui.screens.RulesScreen
 import com.qinghe.ledger.ui.screens.SettingsScreen
+import com.qinghe.ledger.BuildConfig
 import com.qinghe.ledger.ui.screens.StatsScreen
 import com.qinghe.ledger.ui.screens.UpdateDialog
 import com.qinghe.ledger.update.UpdateCheckResult
@@ -129,7 +130,9 @@ fun LedgerRoot(editTransactionId: MutableStateFlow<Long?>? = null) {
     var checkingUpdate by remember { mutableStateOf(false) }
 
     val checkForUpdates: (Boolean) -> Unit = { manual ->
-        if (checkingUpdate) {
+        if (BuildConfig.HUAWEI_CHANNEL) {
+            // Huawei builds are updated through AppGallery only.
+        } else if (checkingUpdate) {
             if (manual) {
                 scope.launch {
                     snackbarHostState.showSnackbar("正在检查更新，请稍候")
@@ -214,7 +217,8 @@ fun LedgerRoot(editTransactionId: MutableStateFlow<Long?>? = null) {
     }
 
     LaunchedEffect(settings.giteeRepo, settings.githubRepo, settings.autoCheckUpdates) {
-        if ((settings.giteeRepo.isNotBlank() || settings.githubRepo.isNotBlank()) &&
+        if (!BuildConfig.HUAWEI_CHANNEL &&
+            (settings.giteeRepo.isNotBlank() || settings.githubRepo.isNotBlank()) &&
             settings.autoCheckUpdates &&
             System.currentTimeMillis() - settings.lastUpdateCheck > 24L * 60L * 60L * 1000L &&
             updateInfo == null

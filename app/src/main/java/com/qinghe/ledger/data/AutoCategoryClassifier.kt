@@ -5,6 +5,7 @@ import com.qinghe.ledger.data.local.CategoryEntity
 import com.qinghe.ledger.data.model.TransactionType
 import java.time.Instant
 import java.time.ZoneId
+import java.util.Locale
 
 /**
  * Merchant / product aware auto-categorizer.
@@ -46,8 +47,31 @@ internal object AutoCategoryClassifier {
         Hint("奈雪", "餐饮", "酒水饮料"), Hint("茶百道", "餐饮", "酒水饮料"),
         Hint("古茗", "餐饮", "酒水饮料"), Hint("沪上阿姨", "餐饮", "酒水饮料"),
         Hint("元气森林", "餐饮", "酒水饮料"), Hint("农夫山泉", "餐饮", "酒水饮料"),
+        Hint("霸王茶姬", "餐饮", "酒水饮料"), Hint("茶颜悦色", "餐饮", "酒水饮料"),
+        Hint("库迪", "餐饮", "酒水饮料"), Hint("幸运咖", "餐饮", "酒水饮料"),
+        Hint("书亦", "餐饮", "酒水饮料"), Hint("益禾堂", "餐饮", "酒水饮料"),
+        Hint("甜啦啦", "餐饮", "酒水饮料"), Hint("柠季", "餐饮", "酒水饮料"),
+        Hint("Manner", "餐饮", "酒水饮料"), Hint("Tims", "餐饮", "酒水饮料"),
+        Hint("挪瓦", "餐饮", "酒水饮料"),
         Hint("零食", "餐饮", "零食"), Hint("小吃", "餐饮", "零食"),
         Hint("薯片", "餐饮", "零食"), Hint("巧克力", "餐饮", "零食"),
+        Hint("零食很忙", "餐饮", "零食"), Hint("赵一鸣", "餐饮", "零食"),
+        Hint("好想来", "餐饮", "零食"), Hint("良品铺子", "餐饮", "零食"),
+        Hint("三只松鼠", "餐饮", "零食"), Hint("来伊份", "餐饮", "零食"),
+        Hint("面包", "餐饮", "零食"), Hint("蛋糕", "餐饮", "零食"),
+        Hint("甜品", "餐饮", "零食"), Hint("水果", "餐饮", "零食"),
+        // 常见餐饮门店：只定位大类，再由支付时间落到早餐 / 午餐 / 晚餐。
+        Hint("沙县", "餐饮"), Hint("兰州拉面", "餐饮"), Hint("黄焖鸡", "餐饮"),
+        Hint("麻辣烫", "餐饮"), Hint("麻辣香锅", "餐饮"), Hint("火锅", "餐饮"),
+        Hint("烧烤", "餐饮"), Hint("米线", "餐饮"), Hint("螺蛳粉", "餐饮"),
+        Hint("面馆", "餐饮"), Hint("拉面", "餐饮"), Hint("饺子", "餐饮"),
+        Hint("馄饨", "餐饮"), Hint("粥店", "餐饮"), Hint("快餐", "餐饮"),
+        Hint("食堂", "餐饮"), Hint("餐厅", "餐饮"), Hint("饭馆", "餐饮"),
+        Hint("炸鸡", "餐饮"), Hint("汉堡", "餐饮"), Hint("披萨", "餐饮"),
+        Hint("寿司", "餐饮"), Hint("日料", "餐饮"), Hint("烤肉", "餐饮"),
+        Hint("川菜", "餐饮"), Hint("湘菜", "餐饮"), Hint("粤菜", "餐饮"),
+        Hint("东北菜", "餐饮"), Hint("家常菜", "餐饮"), Hint("米粉", "餐饮"),
+        Hint("盖饭", "餐饮"), Hint("便当", "餐饮"), Hint("早餐店", "餐饮", "早餐"),
         Hint("一卡通", "餐饮", "一卡通"), Hint("校园卡", "餐饮", "一卡通"),
         Hint("饭卡", "餐饮", "一卡通"),
         // 交通
@@ -64,10 +88,25 @@ internal object AutoCategoryClassifier {
         Hint("停车", "交通", "停车"), Hint("停车场", "交通", "停车"),
         Hint("高铁", "交通", "火车高铁"), Hint("火车", "交通", "火车高铁"),
         Hint("12306", "交通", "火车高铁"), Hint("铁路", "交通", "火车高铁"),
+        Hint("哈啰", "交通", "公交地铁"), Hint("青桔", "交通", "公交地铁"),
+        Hint("共享单车", "交通", "公交地铁"), Hint("特来电", "交通", "电动车"),
+        Hint("星星充电", "交通", "电动车"),
         // 购物
         Hint("超市", "购物", "日用"), Hint("便利店", "购物", "日用"),
         Hint("盒马", "购物", "日用"), Hint("山姆", "购物", "日用"),
         Hint("沃尔玛", "购物", "日用"), Hint("永辉", "购物", "日用"),
+        Hint("罗森", "购物", "日用"), Hint("全家便利", "购物", "日用"),
+        Hint("7-11", "购物", "日用"), Hint("711", "购物", "日用"),
+        Hint("便利蜂", "购物", "日用"), Hint("美宜佳", "购物", "日用"),
+        Hint("天福", "购物", "日用"), Hint("红旗连锁", "购物", "日用"),
+        Hint("芙蓉兴盛", "购物", "日用"), Hint("见福", "购物", "日用"),
+        Hint("大润发", "购物", "日用"), Hint("华润万家", "购物", "日用"),
+        Hint("物美", "购物", "日用"), Hint("联华", "购物", "日用"),
+        Hint("家乐福", "购物", "日用"), Hint("钱大妈", "购物", "日用"),
+        Hint("生鲜", "购物", "日用"), Hint("菜市场", "购物", "日用"),
+        Hint("苏果", "购物", "日用"), Hint("人人乐", "购物", "日用"),
+        Hint("华联", "购物", "日用"), Hint("名创优品", "购物", "日用"),
+        Hint("无印良品", "购物", "日用"),
         Hint("日用品", "购物", "日用"), Hint("洗护", "购物", "日用"),
         Hint("纸巾", "购物", "日用"), Hint("牙膏", "购物", "日用"),
         Hint("优衣库", "购物", "服饰"), Hint("服饰", "购物", "服饰"),
@@ -82,6 +121,9 @@ internal object AutoCategoryClassifier {
         Hint("美妆", "购物", "美妆"), Hint("化妆品", "购物", "美妆"),
         Hint("护肤", "购物", "美妆"), Hint("口红", "购物", "美妆"),
         Hint("面膜", "购物", "美妆"), Hint("香水", "购物", "美妆"),
+        Hint("屈臣氏", "购物", "美妆"), Hint("丝芙兰", "购物", "美妆"),
+        Hint("免税店", "购物", "美妆"), Hint("得物", "购物", "服饰"),
+        Hint("奥特莱斯", "购物", "服饰"), Hint("小红书", "购物"),
         // 居住
         Hint("房租", "居住", "房租"), Hint("租金", "居住", "房租"),
         Hint("房东", "居住", "房租"),
@@ -89,6 +131,9 @@ internal object AutoCategoryClassifier {
         Hint("燃气", "居住", "水电"), Hint("水电", "居住", "水电"),
         Hint("自来水", "居住", "水电"), Hint("国家电网", "居住", "水电"),
         Hint("物业", "居住", "物业"),
+        Hint("链家", "居住", "房租"), Hint("贝壳找房", "居住", "房租"),
+        Hint("自如", "居住", "房租"), Hint("泊寓", "居住", "房租"),
+        Hint("供暖", "居住", "水电"), Hint("热力", "居住", "水电"),
         Hint("宜家", "居住", "家居"), Hint("家居", "居住", "家居"),
         Hint("家具", "居住", "家居"), Hint("家装", "居住", "家居"),
         // 娱乐
@@ -103,19 +148,33 @@ internal object AutoCategoryClassifier {
         Hint("去哪儿", "娱乐", "旅行"),
         Hint("健身", "娱乐", "运动"), Hint("运动", "娱乐", "运动"),
         Hint("游泳", "娱乐", "运动"), Hint("球馆", "娱乐", "运动"),
+        Hint("腾讯视频", "娱乐"), Hint("爱奇艺", "娱乐"), Hint("优酷", "娱乐"),
+        Hint("芒果TV", "娱乐"), Hint("哔哩哔哩", "娱乐"), Hint("B站", "娱乐"),
+        Hint("网易云音乐", "娱乐"), Hint("QQ音乐", "娱乐"),
+        Hint("Spotify", "娱乐"), Hint("Netflix", "娱乐"),
+        Hint("剧本杀", "娱乐"), Hint("密室", "娱乐"), Hint("KTV", "娱乐"),
+        Hint("酒吧", "娱乐"), Hint("演出", "娱乐"), Hint("门票", "娱乐"),
+        Hint("景区", "娱乐", "旅行"),
         // 医疗
         Hint("药品", "医疗", "药品"), Hint("药房", "医疗", "药品"),
         Hint("药店", "医疗", "药品"), Hint("大药房", "医疗", "药品"),
         Hint("门诊", "医疗", "门诊"), Hint("挂号", "医疗", "门诊"),
         Hint("医院", "医疗", "门诊"), Hint("诊所", "医疗", "门诊"),
         Hint("卫生院", "医疗", "门诊"),
-        Hint("体检", "医疗", "体检"),
+        Hint("人民医院", "医疗", "门诊"), Hint("中心医院", "医疗", "门诊"),
+        Hint("口腔", "医疗", "门诊"), Hint("牙科", "医疗", "门诊"),
+        Hint("体检", "医疗", "体检"), Hint("体检中心", "医疗", "体检"),
         // 学习
         Hint("书店", "学习", "书籍"), Hint("图书", "学习", "书籍"),
         Hint("当当", "学习", "书籍"), Hint("买书", "学习", "书籍"),
+        Hint("微信读书", "学习", "书籍"), Hint("京东读书", "学习", "书籍"),
+        Hint("Kindle", "学习", "书籍"),
         Hint("课程", "学习", "课程"), Hint("培训", "学习", "课程"),
         Hint("学费", "学习", "课程"), Hint("网课", "学习", "课程"),
         Hint("学而思", "学习", "课程"), Hint("新东方", "学习", "课程"),
+        Hint("极客时间", "学习", "课程"), Hint("慕课", "学习", "课程"),
+        Hint("Coursera", "学习", "课程"), Hint("Udemy", "学习", "课程"),
+        Hint("网易云课堂", "学习", "课程"),
         Hint("云服务", "学习", "云服务"), Hint("阿里云", "学习", "云服务"),
         Hint("腾讯云", "学习", "云服务"), Hint("百度网盘", "学习", "云服务"),
         Hint("iCloud", "学习", "云服务"), Hint("服务器", "学习", "云服务"),
@@ -125,7 +184,7 @@ internal object AutoCategoryClassifier {
         // 人情
         Hint("红包", "人情", "红包"),
         Hint("礼物", "人情", "礼物"), Hint("礼品", "人情", "礼物"),
-        Hint("花束", "人情", "礼物"),
+        Hint("花束", "人情", "礼物"), Hint("鲜花", "人情", "礼物"),
         Hint("请客", "人情", "请客"), Hint("聚餐", "人情", "请客"),
         Hint("亲属卡", "人情", "亲属卡"),
         // 通讯
@@ -226,6 +285,7 @@ internal object AutoCategoryClassifier {
         }
 
         // 2. Learned and built-in rules: user rules first, then the longest keyword.
+        val normalizedCombined = merchantKey(combined)
         rules.asSequence()
             .filter { it.keyword.isNotBlank() }
             .sortedWith(
@@ -235,7 +295,12 @@ internal object AutoCategoryClassifier {
             .forEach { rule ->
                 val keyword = rule.keyword.trim()
                 val base = byId[rule.categoryId] ?: return@forEach
-                if (!combined.contains(keyword, ignoreCase = true)) return@forEach
+                val normalizedKeyword = merchantKey(keyword)
+                val matched = combined.contains(keyword, ignoreCase = true) ||
+                    (!rule.builtIn &&
+                        normalizedKeyword.length >= 2 &&
+                        normalizedCombined.contains(normalizedKeyword))
+                if (!matched) return@forEach
                 return Match(narrow(base), "规则:$keyword")
             }
 
@@ -246,10 +311,56 @@ internal object AutoCategoryClassifier {
         matchHints(platforms, merchantText, "平台")?.let { return it }
         matchHints(platforms, productText, "平台")?.let { return it }
 
+        // The merchant itself may name a category ("零食很忙", "早餐店", "电影票").
+        val namedCategory = typeCategories.asSequence()
+            .filter { it.parentId != null && it.name != "其他" && it.name.length >= 2 }
+            .filter { combined.contains(it.name, ignoreCase = true) }
+            .maxByOrNull { it.name.length }
+        if (namedCategory != null) return Match(namedCategory, "分类名:${namedCategory.name}")
+
         val fallback = topLevel.firstOrNull { it.name == "其他" }
             ?: topLevel.firstOrNull()
             ?: return null
         return Match(narrow(fallback), "默认其他")
+    }
+
+    /**
+     * Stable key for merchant → category memory. Branch and company suffixes
+     * are stripped so "瑞幸咖啡（北京）有限公司", "瑞幸咖啡(万达店)" and
+     * "瑞幸咖啡" all resolve to the same merchant.
+     */
+    internal fun merchantKey(raw: String): String = raw
+        .lowercase(Locale.ROOT)
+        .replace(Regex("""[（(【\[][^）)】\]]*[）)】\]]"""), "")
+        .replace(Regex("""[\s　]+"""), "")
+        .replace(
+            Regex(
+                """(有限责任公司|股份有限公司|有限公司|分公司|旗舰店|专营店|专卖店|直营店|门店|分店)"""
+            ),
+            ""
+        )
+        .replace(Regex("""[·•.,，。:：;；!！?？'\"“”‘’_/\\|—–-]+"""), "")
+        .trim()
+
+    /**
+     * Platform-only "merchants" must never become keyword rules: learning
+     * "美团外卖 → 零食" would poison every future Meituan payment.
+     */
+    private val genericMerchantKeys = setOf(
+        "美团", "美团外卖", "美团支付", "美团单车", "美团打车", "美团酒店",
+        "美团优选", "多多买菜", "橙心优选",
+        "淘宝", "天猫", "京东", "拼多多", "唯品会", "苏宁",
+        "抖音", "抖音支付", "抖音商城", "抖音外卖", "抖音团购",
+        "支付宝", "微信支付", "饿了么", "收付款", "扫一扫",
+        "小红书", "得物", "闲鱼", "转转"
+    )
+
+    internal fun isLearnableMerchant(raw: String): Boolean {
+        val trimmed = raw.trim()
+        if (trimmed.length !in 2..40) return false
+        val key = merchantKey(trimmed)
+        if (key.length < 2) return false
+        return trimmed !in genericMerchantKeys && key !in genericMerchantKeys
     }
 
     private fun bestHint(candidates: List<Hint>, text: String): Hint? =

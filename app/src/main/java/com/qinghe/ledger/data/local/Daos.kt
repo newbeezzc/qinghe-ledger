@@ -131,6 +131,18 @@ interface TransactionDao {
 
     @Query(
         """
+        SELECT categoryId FROM transactions
+        WHERE categoryId IS NOT NULL
+          AND :key != ''
+          AND (merchant = :key OR note = :key)
+        ORDER BY createdAt DESC, id DESC
+        LIMIT 20
+        """
+    )
+    suspend fun findRecentCategoryIdsForKey(key: String): List<Long>
+
+    @Query(
+        """
         SELECT * FROM transactions
         WHERE amountCents = :amountCents
           AND (

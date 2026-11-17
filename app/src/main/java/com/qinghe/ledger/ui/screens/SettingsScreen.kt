@@ -78,7 +78,11 @@ fun SettingsScreen(
             InfoCard(
                 emoji = "🔒",
                 title = "数据只在本机",
-                message = "账目只保存在这台手机上。联网仅用于检查/下载 Gitee / GitHub 更新，不上传账单、通知或页面文本。"
+                message = if (BuildConfig.HUAWEI_CHANNEL) {
+                    "账目只保存在这台手机上。本版本不联网，不上传账单、通知或页面文本。"
+                } else {
+                    "账目只保存在这台手机上。联网仅用于检查/下载 Gitee / GitHub 更新，不上传账单、通知或页面文本。"
+                }
             )
         }
 
@@ -124,31 +128,33 @@ fun SettingsScreen(
             }
         }
 
-        item(key = "about-title") {
-            SectionTitle(text = "关于与更新", modifier = Modifier.padding(top = 4.dp, start = 4.dp))
-        }
-        item(key = "about-group") {
-            SettingsGroup {
-                GroupedNavRow(
-                    emoji = "⬆️",
-                    title = "检查更新",
-                    subtitle = "当前 v${BuildConfig.VERSION_NAME} · ${BuildConfig.BUILD_TYPE}",
-                    onClick = onCheckUpdate
-                )
-                SettingsDivider()
-                GroupedSwitchRow(
-                    title = "启动时自动检查更新",
-                    subtitle = "每天最多检查一次 Gitee / GitHub Release",
-                    checked = settings.autoCheckUpdates,
-                    onCheckedChange = onToggleAutoCheckUpdate,
-                    emoji = "🔄"
-                )
+        if (!BuildConfig.HUAWEI_CHANNEL) {
+            item(key = "about-title") {
+                SectionTitle(text = "关于与更新", modifier = Modifier.padding(top = 4.dp, start = 4.dp))
+            }
+            item(key = "about-group") {
+                SettingsGroup {
+                    GroupedNavRow(
+                        emoji = "⬆️",
+                        title = "检查更新",
+                        subtitle = "当前 v${BuildConfig.VERSION_NAME} · ${BuildConfig.BUILD_TYPE}",
+                        onClick = onCheckUpdate
+                    )
+                    SettingsDivider()
+                    GroupedSwitchRow(
+                        title = "启动时自动检查更新",
+                        subtitle = "每天最多检查一次 Gitee / GitHub Release",
+                        checked = settings.autoCheckUpdates,
+                        onCheckedChange = onToggleAutoCheckUpdate,
+                        emoji = "🔄"
+                    )
+                }
             }
         }
 
         item(key = "footer") {
             Text(
-                text = "青禾记账 · 本地优先 · Gitee / GitHub 更新",
+                text = "青禾自动记账 · 本地优先 · 账目只在本机",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier

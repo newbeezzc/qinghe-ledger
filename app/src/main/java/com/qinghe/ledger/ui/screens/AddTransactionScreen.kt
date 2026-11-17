@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -91,7 +92,8 @@ fun AddTransactionScreen(
     onDelete: (TransactionEntity) -> Unit,
     onValidationError: (String) -> Unit,
     autoConfirm: Boolean = false,
-    compact: Boolean = false
+    compact: Boolean = false,
+    showKeypad: Boolean = true
 ) {
     val context = LocalContext.current
     val initialDateTime = remember(existing) {
@@ -121,6 +123,11 @@ fun AddTransactionScreen(
     var selectedDate by remember(existing) { mutableStateOf(initialDateTime.toLocalDate()) }
     var selectedTime by remember(existing) { mutableStateOf(initialDateTime.toLocalTime()) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    // The automatic confirmation card does not need the number keypad: the
+    // amount comes from the payment. It stays available behind 「改金额」.
+    var keypadVisible by remember(compact, showKeypad) {
+        mutableStateOf(!compact || showKeypad)
+    }
 
     val type = when (selectedTypeIndex) {
         0 -> TransactionType.EXPENSE
@@ -374,6 +381,14 @@ fun AddTransactionScreen(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
                     )
+                    if (compact && !keypadVisible) {
+                        TextButton(
+                            onClick = { keypadVisible = true },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                        ) {
+                            Text("改金额", style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
                     Text(
                         text = categoryLabel,
                         style = MaterialTheme.typography.bodyMedium,
@@ -580,74 +595,76 @@ fun AddTransactionScreen(
                 )
             }
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(if (compact) 150.dp else 214.dp)
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                val rows = listOf(
-                    listOf("1", "2", "3"),
-                    listOf("4", "5", "6"),
-                    listOf("7", "8", "9"),
-                    listOf(".", "0", "DEL")
-                )
-                Column(
-                    modifier = Modifier.weight(if (compact) 1f else 3f),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+            if (keypadVisible) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(if (compact) 150.dp else 214.dp)
+                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    rows.forEach { row ->
-                        Row(
-                            modifier = Modifier.weight(1f),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            row.forEach { key ->
-                                Surface(
-                                    onClick = { updateAmount(key) },
-                                    shape = RoundedCornerShape(14.dp),
-                                    color = if (key == "DEL") {
-                                        MaterialTheme.colorScheme.surfaceVariant
-                                    } else {
-                                        MaterialTheme.colorScheme.surface
-                                    },
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxHeight()
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        if (key == "DEL") {
-                                            Icon(
-                                                Icons.Rounded.Backspace,
-                                                contentDescription = "退格"
-                                            )
+                    val rows = listOf(
+                        listOf("1", "2", "3"),
+                        listOf("4", "5", "6"),
+                        listOf("7", "8", "9"),
+                        listOf(".", "0", "DEL")
+                    )
+                    Column(
+                        modifier = Modifier.weight(if (compact) 1f else 3f),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        rows.forEach { row ->
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                row.forEach { key ->
+                                    Surface(
+                                        onClick = { updateAmount(key) },
+                                        shape = RoundedCornerShape(14.dp),
+                                        color = if (key == "DEL") {
+                                            MaterialTheme.colorScheme.surfaceVariant
                                         } else {
-                                            Text(
-                                                text = key,
-                                                style = MaterialTheme.typography.titleLarge
-                                            )
+                                            MaterialTheme.colorScheme.surface
+                                        },
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .fillMaxHeight()
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            if (key == "DEL") {
+                                                Icon(
+                                                    Icons.Rounded.Backspace,
+                                                    contentDescription = "退格"
+                                                )
+                                            } else {
+                                                Text(
+                                                    text = key,
+                                                    style = MaterialTheme.typography.titleLarge
+                                                )
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
                     }
-                }
-                if (!compact) {
-                    Surface(
-                        onClick = { submit() },
-                        shape = RoundedCornerShape(18.dp),
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(
-                                text = if (autoConfirm) "记录" else "保存",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onPrimary
-                            )
+                    if (!compact) {
+                        Surface(
+                            onClick = { submit() },
+                            shape = RoundedCornerShape(18.dp),
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = if (autoConfirm) "记录" else "保存",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onPrimary
+                                )
+                            }
                         }
                     }
                 }
