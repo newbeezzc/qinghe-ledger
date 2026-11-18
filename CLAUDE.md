@@ -88,6 +88,15 @@ Do not add channel-specific differences beyond these. Any new update entry, upda
 - `AccountType` includes `DOUYIN` and `MEITUAN`; the first auto record from those apps creates a dedicated account on demand (new installs seed them too). Do not route new sources into cash silently.
 - Both capture paths go through `AutoRecorder.handle`, so every auto record attempts to open the confirmation page — do not add a second insert path that bypasses it.
 
+### Home-screen widget & quick text entry
+
+- `widget/TodayWidgetProvider.kt` + `widget/WidgetUpdater.kt` render a 4×1 `res/layout/widget_today.xml` with 今日支出 / 本月支出 / 本月收入. `TodayWidgetProvider.onReceive` handles `APPWIDGET_UPDATE`, `DATE_CHANGED`, `TIME_SET` and `TIMEZONE_CHANGED` via `goAsync()` + `WidgetUpdater.refreshAsync`; the provider must stay registered in the main manifest (both flavors share it).
+- `LedgerRepository` takes an `onTransactionsChanged` callback, wired in `AppContainer` to `WidgetUpdater.refresh`. Every `addTransaction` / `updateTransaction` / `deleteTransaction` / `deleteAutoTransaction` / successful `recordAuto` triggers an immediate widget refresh; the widget also has a 30-minute `updatePeriodMillis` fallback. Do not add a transaction write path that bypasses this callback.
+- `LedgerRepository.widgetSummary` computes today/month boundaries (`LocalDate.toEpochMillis()`, `YearMonth.startMillis()/endMillis()`) and calls `TransactionDao.widgetSummary`, a read-only aggregate query returning `WidgetSummary`. No schema change or migration is involved.
+- `data/QuickTextParser.kt` is a pure-Kotlin parser for one line of Chinese (`午饭 25`, `打车18.5`, `昨天奶茶12`, `工资 8000`). It extracts amount/type/relative date (今天/昨天/前天; non-today entries use 15:00 to avoid meal-time bias), rejects date/time/quantity/order-number/discount digits, supports ¥/元/块/commas/full-width digits and explicit +/- signs, and detects income keywords plus red-packet context. `LedgerRepository.parseQuickEntry` resolves the category through `AutoCategoryClassifier`; extend `QuickTextParserTest` for new rules.
+- `widget/WidgetEntryActivity.kt` is a transparent bottom-card entry (modelled on `QuickEditActivity`): auto-focused text field → 250 ms debounced parse → preview with editable expense/income and category picker → confirm inserts a `MANUAL` transaction. The account is fixed to cash via `LedgerRepository.ensureCashAccount()` (no account selector); keep the preview compact so the category row stays visible above the keyboard. It sets `AppVisibility.isForeground` while open.
+- No new permissions and no Glance/WorkManager dependency; `RemoteViews` only supports framework views (LinearLayout/TextView).
+
 ### UI
 
 - `ui/LedgerRoot.kt` owns tabs, full-screen overlays (add/edit, accounts, categories, rules), update dialog, and the top-level snackbar.
@@ -114,9 +123,13 @@ Do not add channel-specific differences beyond these. Any new update entry, upda
 ## Tests
 
 - `app/src/test/java/com/qinghe/ledger/auto/PaymentParserTest.kt` — notification/screen parsing, false positives, timestamps, categories/notes.
+- `app/src/test/java/com/qinghe/ledger/data/QuickTextParserTest.kt` — widget free-text amount/type/relative-date parsing and false-positive rejection.
+- `app/src/test/java/com/qinghe/ledger/data/AutoCategoryClassifierTest.kt` — merchant/product/platform hints, rules, quick-text categories.
+- `app/src/test/java/com/qinghe/ledger/data/CategoryOrderingTest.kt` — 其他-last ordering.
+- `app/src/test/java/com/qinghe/ledger/util/MoneyFormatTest.kt` — widget compact 万/亿 formatting.
 - `app/src/test/java/com/qinghe/ledger/update/UpdateVersionTest.kt` — semver comparison.
 - `app/src/test/java/com/qinghe/ledger/update/UpdateSourceTest.kt` — mirror prefix/`{url}` handling, Gitee/GitHub candidate ordering, and Gitee APK selection.
-- Current expected total: 91 tests (51 parser + 22 classifier + 15 updater + 3 category ordering).
+- Current expected total: 130 tests (51 parser + 27 classifier + 30 quick text + 4 money format + 15 updater + 3 category ordering).
 
 ## Invariants / gotchas
 

@@ -2,4 +2,10 @@
 <resources>
     <color name="qinghe_background">#F7F4EC</color>
     <color name="ic_launcher_background">#2F6B4F</color>
+    <color name="widget_background">#F7F4EC</color>
+    <color name="widget_border">#E2DCCB</color>
+    <color name="widget_text_primary">#1F2A24</color>
+    <color name="widget_text_secondary">#6B7A72</color>
+    <color name="widget_expense">#C05A5A</color>
+    <color name="widget_income">#2A9D8F</color>
 </resources>

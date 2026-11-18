@@ -13,6 +13,12 @@ data class AccountDelta(
     val delta: Long
 )
 
+data class WidgetSummary(
+    val todayExpenseCents: Long,
+    val monthExpenseCents: Long,
+    val monthIncomeCents: Long
+)
+
 @Dao
 interface AccountDao {
     @Query("SELECT * FROM accounts WHERE archived = 0 ORDER BY sortOrder, id")
@@ -140,6 +146,28 @@ interface TransactionDao {
         """
     )
     suspend fun findRecentCategoryIdsForKey(key: String): List<Long>
+
+    @Query(
+        """
+        SELECT
+          COALESCE(SUM(CASE WHEN type = 'EXPENSE'
+                             AND occurredAt >= :todayStart
+                             AND occurredAt < :todayEnd
+                            THEN amountCents ELSE 0 END), 0) AS todayExpenseCents,
+          COALESCE(SUM(CASE WHEN type = 'EXPENSE' THEN amountCents ELSE 0 END), 0)
+            AS monthExpenseCents,
+          COALESCE(SUM(CASE WHEN type = 'INCOME' THEN amountCents ELSE 0 END), 0)
+            AS monthIncomeCents
+        FROM transactions
+        WHERE occurredAt >= :monthStart AND occurredAt < :monthEnd
+        """
+    )
+    suspend fun widgetSummary(
+        todayStart: Long,
+        todayEnd: Long,
+        monthStart: Long,
+        monthEnd: Long
+    ): WidgetSummary
 
     @Query(
         """

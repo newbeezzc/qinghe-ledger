@@ -18,6 +18,7 @@
   - 确认页：自动记账后在付款 App 底部弹出确认卡片（可纵向滚动，金额、分类、账户、备注和支付时间已自动填好），默认不显示数字键盘；需要修改金额时点「改金额」再展开。右下角「确认」保存，右下角「取消」删除这笔自动账目并返回付款 App。没有悬浮窗权限时回退到通知栏
 - **两级分类**：大类 + 小类，内置 16 个大类、50 个小类，可自定义
 - **智能归类**：按用户规则、商户名、商品说明、平台关键词和支付时间自动落到小类；手动修改一次某商户的分类后，会记住商户与分类的对应关系，下次自动使用
+- **桌面小工具**：4×1 组件显示今日支出、本月支出、本月收入；点击后输入一句话（如「午饭 25」「打车18.5」「昨天奶茶12」「工资 8000」），自动识别金额、收支、日期和分类，确认后记入现金账户并立即刷新组件
 - **账户**：现金、微信、支付宝、抖音、美团、银行卡，余额随账目自动计算
 - **统计**：支出 / 收入构成、分类占比、每日柱状图
 - **预算**：月度预算、剩余额度、日均可用、分类进度
@@ -58,6 +59,18 @@
 
 **边界**：自动识别不保证 100% 准确。银行 App、云闪付、部分小程序支付、红包等场景可能识别不到；微信、支付宝、抖音、美团改版也可能导致页面识别失效。重要账目请偶尔核对。
 
+## 桌面小工具与快捷文字记账
+
+1. 长按桌面 → 小组件 → 青禾自动记账 → 把「今日收支」4×1 拖到桌面。
+2. 组件一行显示今日支出、本月支出、本月收入。每次新增 / 修改 / 删除账目后立即刷新；跨日、修改系统时间 / 时区时会刷新，另有 30 分钟周期更新。
+3. 点击组件打开底部输入卡片，输入一句话即可自动识别，例如：
+   - `午饭 25` → 支出 / 餐饮-午餐
+   - `打车18.5` → 支出 / 交通-打车
+   - `昨天买奶茶12` → 支出 / 昨天 / 餐饮-酒水饮料
+   - `工资 8000` → 收入 / 工资
+4. 预览中可切换「支出 / 收入」、点分类手动修改；账户固定为现金。点「确认记账」保存并返回桌面。
+5. 金额支持 `¥12.3`、`12.3元`、`12.3块`、`1,200` 和全角数字；日期、时间、数量、订单号、折扣里的数字不会被误当成金额。没有识别到金额时，在文字里加上阿拉伯数字重试。
+
 ## 隐私
 
 - 账目、分类、账户、预算和规则全部保存在本机 Room 数据库。
@@ -73,21 +86,21 @@
 从 [GitHub Releases](https://github.com/newbeezzc/qinghe-ledger/releases/latest) 下载最新 APK：
 
 ```
-dist/qinghe-1.0.22.apk
+dist/qinghe-1.0.23.apk
 ```
 
 也可以连接手机后安装：
 
 ```bash
-adb install -r dist/qinghe-1.0.22.apk
+adb install -r dist/qinghe-1.0.23.apk
 ```
 
-安装后在「我的」标题旁可以看到 `v1.0.22 · release`（如果是 `debug`，说明装错了包）。
+安装后在「我的」标题旁可以看到 `v1.0.23 · release`（如果是 `debug`，说明装错了包）。
 
 当前 APK 的 SHA-256：
 
 ```
-618881ac60cb1f5cc9e2f78d13fa881222de5a2124993fc20550c30728423b62
+0a331a4dc80c3eb849e3565bc94839746c5871306e305367c89f9a6b0bf942cf
 ```
 
 ### 签名说明
@@ -158,9 +171,10 @@ app/src/main/java/com/qinghe/ledger/
 ├── QingheApp.kt                 # Application / 依赖容器 / 初始化
 ├── di/AppContainer.kt
 ├── data/
-│   ├── LedgerRepository.kt      # 账目、账户、分类、预算、规则
+│   ├── LedgerRepository.kt      # 账目、账户、分类、预算、规则、小工具汇总
 │   ├── SettingsRepository.kt    # DataStore 设置
 │   ├── AutoCategoryClassifier.kt# 自动分类（纯 Kotlin，可单测）
+│   ├── QuickTextParser.kt       # 快捷文字解析（纯 Kotlin，可单测）
 │   ├── local/                   # Room 实体、DAO、数据库
 │   └── model/Models.kt          # 收支 / 来源 / 账户类型
 ├── auto/
@@ -169,6 +183,10 @@ app/src/main/java/com/qinghe/ledger/
 │   ├── AutoRecordNotifier.kt    # 通知栏提醒
 │   ├── PaymentNotificationListener.kt
 │   └── PaymentAccessibilityService.kt
+├── widget/
+│   ├── TodayWidgetProvider.kt   # 4×1 桌面小工具
+│   ├── WidgetUpdater.kt         # 汇总查询与 RemoteViews 渲染
+│   └── WidgetEntryActivity.kt   # 点击组件后的快捷文字记账卡片
 ├── ui/
 │   ├── LedgerRoot.kt            # 底部导航与页面切换
 │   ├── QuickEditActivity.kt    # 自动记账底部确认卡片（复用 AddTransactionScreen）
@@ -192,7 +210,7 @@ app/src/main/java/com/qinghe/ledger/
 ./gradlew :app:testGithubDebugUnitTest
 ```
 
-覆盖支付通知 / 页面解析、收支方向、聊天与账单汇总排除、自动分类（商户 / 商品 / 平台 / 时间 / 规则优先级）、分类排序和版本比较。
+覆盖支付通知 / 页面解析、快捷文字解析、收支方向、聊天与账单汇总排除、自动分类（商户 / 商品 / 平台 / 时间 / 规则优先级）、金额格式、分类排序和版本比较。
 
 ## 已知限制
 

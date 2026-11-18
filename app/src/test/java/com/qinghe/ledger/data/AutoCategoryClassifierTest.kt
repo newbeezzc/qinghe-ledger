@@ -231,4 +231,32 @@ class AutoCategoryClassifierTest {
         assertFalse(AutoCategoryClassifier.isLearnableMerchant("支付宝"))
         assertTrue(AutoCategoryClassifier.isLearnableMerchant("零食很忙"))
     }
+
+    @Test
+    fun `quick text lunch classifies to lunch subcategory`() {
+        assertEquals("午餐", classify(null, "午饭 25")?.category?.name)
+    }
+
+    @Test
+    fun `quick text taxi classifies to taxi subcategory`() {
+        assertEquals("打车", classify(null, "打车18.5")?.category?.name)
+    }
+
+    @Test
+    fun `quick text milk tea classifies to drinks`() {
+        assertEquals("酒水饮料", classify(null, "昨天买奶茶12")?.category?.name)
+    }
+
+    @Test
+    fun `quick text salary classifies to income salary`() {
+        assertEquals(
+            "工资",
+            classify(null, "工资 8000", type = TransactionType.INCOME)?.category?.name
+        )
+    }
+
+    @Test
+    fun `quick text rent classifies to rent`() {
+        assertEquals("房租", classify(null, "房租2000")?.category?.name)
+    }
 }

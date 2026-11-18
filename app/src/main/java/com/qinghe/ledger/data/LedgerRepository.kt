@@ -9,9 +9,16 @@ import com.qinghe.ledger.data.local.AutoRuleEntity
 import com.qinghe.ledger.data.local.BudgetEntity
 import com.qinghe.ledger.data.local.CategoryEntity
 import com.qinghe.ledger.data.local.TransactionEntity
+import com.qinghe.ledger.data.local.WidgetSummary
 import com.qinghe.ledger.data.model.AccountType
 import com.qinghe.ledger.data.model.TransactionSource
 import com.qinghe.ledger.data.model.TransactionType
+import com.qinghe.ledger.util.endMillis
+import com.qinghe.ledger.util.startMillis
+import com.qinghe.ledger.util.toEpochMillis
+import java.time.Instant
+import java.time.YearMonth
+import java.time.ZoneId
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -30,7 +37,19 @@ data class AutoRecordResult(
     val note: String = ""
 )
 
-class LedgerRepository(private val db: AppDatabase) {
+data class QuickEntryResult(
+    val amountCents: Long?,
+    val type: TransactionType,
+    val occurredAtMillis: Long,
+    val category: CategoryEntity?,
+    val note: String,
+    val reason: String
+)
+
+class LedgerRepository(
+    private val db: AppDatabase,
+    private val onTransactionsChanged: () -> Unit = {}
+) {
     private val accountDao = db.accountDao()
     private val categoryDao = db.categoryDao()
     private val transactionDao = db.transactionDao()
@@ -38,6 +57,10 @@ class LedgerRepository(private val db: AppDatabase) {
     private val ruleDao = db.autoRuleDao()
 
     private val seedMutex = Mutex()
+
+    private fun notifyTransactionsChanged() {
+        runCatching { onTransactionsChanged() }
+    }
 
     val accounts: Flow<List<AccountEntity>> = accountDao.observeAll()
     val categories: Flow<List<CategoryEntity>> = categoryDao.observeAll()
@@ -151,25 +174,101 @@ class LedgerRepository(private val db: AppDatabase) {
             }
     }
 
-    suspend fun addTransaction(transaction: TransactionEntity): Long =
-        transactionDao.insert(transaction)
+    suspend fun addTransaction(transaction: TransactionEntity): Long {
+        val id = transactionDao.insert(transaction)
+        notifyTransactionsChanged()
+        return id
+    }
 
-    suspend fun updateTransaction(transaction: TransactionEntity) =
+    suspend fun updateTransaction(transaction: TransactionEntity) {
         transactionDao.update(transaction)
+        notifyTransactionsChanged()
+    }
 
-    suspend fun deleteTransaction(transaction: TransactionEntity) =
+    suspend fun deleteTransaction(transaction: TransactionEntity) {
         transactionDao.delete(transaction)
+        notifyTransactionsChanged()
+    }
 
     /** Deletes an auto-recorded entry, e.g. when the user taps 取消记账 on the overlay. */
     suspend fun deleteAutoTransaction(id: Long): Boolean {
         val transaction = transactionDao.findById(id) ?: return false
         if (transaction.source == TransactionSource.MANUAL.name) return false
         transactionDao.delete(transaction)
+        notifyTransactionsChanged()
         return true
     }
 
     suspend fun findTransaction(id: Long): TransactionEntity? =
         transactionDao.findById(id)
+
+    /** Today's expense plus this month's expense/income for the home-screen widget. */
+    suspend fun widgetSummary(nowMillis: Long = System.currentTimeMillis()): WidgetSummary {
+        val today = Instant.ofEpochMilli(nowMillis)
+            .atZone(ZoneId.systemDefault())
+            .toLocalDate()
+        val month = YearMonth.from(today)
+        return transactionDao.widgetSummary(
+            todayStart = today.toEpochMillis(),
+            todayEnd = today.plusDays(1).toEpochMillis(),
+            monthStart = month.startMillis(),
+            monthEnd = month.endMillis()
+        )
+    }
+
+    /** Parses the widget's free-text input and resolves its category. */
+    suspend fun parseQuickEntry(
+        text: String,
+        typeOverride: TransactionType? = null
+    ): QuickEntryResult {
+        val parsed = QuickTextParser.parse(text)
+        val type = typeOverride ?: when (parsed.type) {
+            PaymentType.INCOME -> TransactionType.INCOME
+            PaymentType.EXPENSE -> TransactionType.EXPENSE
+        }
+        if (text.isBlank() || parsed.amountCents == null) {
+            return QuickEntryResult(
+                amountCents = null,
+                type = type,
+                occurredAtMillis = parsed.occurredAtMillis,
+                category = null,
+                note = parsed.note,
+                reason = parsed.reason
+            )
+        }
+        val categories = categoryDao.getAll()
+        val category = AutoCategoryClassifier.classify(
+            type = type,
+            merchant = null,
+            rawText = text,
+            occurredAtMillis = parsed.occurredAtMillis,
+            categories = categories,
+            rules = ruleDao.getAll()
+        )?.category
+        return QuickEntryResult(
+            amountCents = parsed.amountCents,
+            type = type,
+            occurredAtMillis = parsed.occurredAtMillis,
+            category = category,
+            note = parsed.note,
+            reason = parsed.reason
+        )
+    }
+
+    /**
+     * The widget entry always records to cash. If the user removed the cash
+     * account, fall back to the first account and only create one when the
+     * ledger has no accounts at all.
+     */
+    suspend fun ensureCashAccount(): AccountEntity = seedMutex.withLock {
+        val accounts = accountDao.getAll()
+        accounts.firstOrNull { it.type == AccountType.CASH.name }?.let { return@withLock it }
+        accounts.firstOrNull()?.let { return@withLock it }
+        val id = accountDao.insert(
+            AccountEntity(name = "现金", type = AccountType.CASH.name)
+        )
+        AccountEntity(id = id, name = "现金", type = AccountType.CASH.name)
+    }
 
     suspend fun addAccount(name: String, type: AccountType, initialBalanceCents: Long): Long {
         val existing = accountDao.getAll()
@@ -426,6 +525,7 @@ class LedgerRepository(private val db: AppDatabase) {
                 sourcePackage = pkg
             )
         )
+        notifyTransactionsChanged()
 
         return AutoRecordResult(
             transactionId = id,

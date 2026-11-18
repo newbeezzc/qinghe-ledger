@@ -24,6 +24,32 @@ object MoneyFormat {
     fun withSymbol(cents: Long): String =
         if (cents < 0) "-¥${amount(-cents)}" else "¥${amount(cents)}"
 
+    /**
+     * Compact form for the 4x1 home-screen widget: full amount below ¥10,000,
+     * otherwise "1.2万" / "1.2亿" so three columns fit in one widget row.
+     */
+    fun compactWithSymbol(cents: Long): String {
+        val abs = kotlin.math.abs(cents)
+        if (abs < 1_000_000L) return withSymbol(cents)
+        val sign = if (cents < 0) "-" else ""
+        val yuan = abs / 100.0
+        val value = if (yuan >= 100_000_000.0) {
+            "${oneDecimal(yuan / 100_000_000.0)}亿"
+        } else {
+            "${oneDecimal(yuan / 10_000.0)}万"
+        }
+        return "$sign¥$value"
+    }
+
+    private fun oneDecimal(value: Double): String {
+        val rounded = kotlin.math.round(value * 10.0) / 10.0
+        return if (rounded == rounded.toLong().toDouble()) {
+            rounded.toLong().toString()
+        } else {
+            String.format(Locale.CHINA, "%.1f", rounded)
+        }
+    }
+
     /** Converts user keypad input such as "12.3" into 1230 cents. */
     fun inputToCents(input: String): Long? {
         val trimmed = input.trim()

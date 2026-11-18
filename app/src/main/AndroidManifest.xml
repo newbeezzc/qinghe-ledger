@@ -45,6 +45,31 @@
             android:theme="@style/Theme.QingheLedger.Transparent"
             android:windowSoftInputMode="adjustResize" />
 
+        <activity
+            android:name=".widget.WidgetEntryActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/Theme.QingheLedger.Transparent"
+            android:windowSoftInputMode="adjustResize" />
+
+        <receiver
+            android:name=".widget.TodayWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.DATE_CHANGED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/today_widget_info" />
+        </receiver>
+
+
         <service
             android:name=".auto.PaymentNotificationListener"
             android:exported="false"

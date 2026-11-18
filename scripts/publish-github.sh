@@ -1,22 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Build both channel APKs and publish the GitHub one.
+# Build the GitHub channel APK and publish it.
 #
 # Usage: scripts/publish-github.sh [owner/repo]
 #
 # Steps:
-#   1. clean build both flavors (R8, ~2.7 MB each):
-#        github -> dist/qinghe-<version>.apk       (published to GitHub)
-#        huawei -> dist/qinghe-<version>-huawei.apk (local only, for AppGallery)
-#   2. remove older dist APKs except the two current ones
-#   3. update the SHA-256 line in README.md
+#   1. clean build the github flavor (R8, ~2.7 MB)
+#   2. remove older GitHub dist APKs (Huawei artifacts are left untouched)
+#   3. update the version, versioned path and SHA-256 line in README.md
 #   4. git add -A, commit, and push to origin
-#   5. create the GitHub Release v<version> with the GitHub APK attached
+#   5. create the GitHub Release v<version> with the APK attached
 #
-# The Huawei APK is never attached to the GitHub Release: the in-app updater
-# could otherwise pick the wrong asset, and AppGallery builds are uploaded by
-# hand through AGC.
+# Huawei channel artifacts are intentionally not built, copied or published.
 #
 # Auth: uses `gh` when installed; otherwise reads GITHUB_TOKEN / GH_TOKEN, or a
 # local `.github-token` file (git-ignored).
@@ -37,45 +33,35 @@ if [[ -z "$VERSION" ]]; then
     exit 1
 fi
 
-echo "==> Building release v${VERSION} (versionCode ${VERSION_CODE}) for both channels"
+echo "==> Building release v${VERSION} (versionCode ${VERSION_CODE}) for the GitHub channel"
 if [[ "${SKIP_BUILD:-0}" == "1" ]]; then
-    echo "    SKIP_BUILD=1, reusing github/huawei release APKs"
+    echo "    SKIP_BUILD=1, reusing the github release APK"
 else
     if [[ "${OSTYPE:-}" == msys* || "${OSTYPE:-}" == cygwin* ]]; then
-        ./gradlew.bat clean :app:assembleGithubRelease :app:assembleHuaweiRelease
+        ./gradlew.bat clean :app:assembleGithubRelease
     else
-        ./gradlew clean :app:assembleGithubRelease :app:assembleHuaweiRelease
+        ./gradlew clean :app:assembleGithubRelease
     fi
 fi
 
 GITHUB_APK="app/build/outputs/apk/github/release/app-github-release.apk"
-HUAWEI_APK="app/build/outputs/apk/huawei/release/app-huawei-release.apk"
 
 mkdir -p dist
+# Leave any existing Huawei APKs alone; only clean up old GitHub channel APKs.
 find dist -maxdepth 1 -name 'qinghe-*.apk' \
-    ! -name "qinghe-${VERSION}.apk" \
-    ! -name "qinghe-${VERSION}-huawei.apk" -delete
+    ! -name '*-huawei.apk' \
+    ! -name "qinghe-${VERSION}.apk" -delete
 APK="dist/qinghe-${VERSION}.apk"
 cp "$GITHUB_APK" "$APK"
-HUAWEI_OUT="dist/qinghe-${VERSION}-huawei.apk"
-cp "$HUAWEI_APK" "$HUAWEI_OUT"
 
 SIZE_MB="$(du -m "$APK" | cut -f1)"
 if [[ "$SIZE_MB" -gt 10 ]]; then
     echo "APK is ${SIZE_MB} MB, expected ~3 MB. Aborting (likely a dirty incremental packaging)." >&2
     exit 1
 fi
-HUAWEI_SIZE_MB="$(du -m "$HUAWEI_OUT" | cut -f1)"
-if [[ "$HUAWEI_SIZE_MB" -gt 10 ]]; then
-    echo "Huawei APK is ${HUAWEI_SIZE_MB} MB, expected ~3 MB. Aborting." >&2
-    exit 1
-fi
 
 SHA="$(sha256sum "$APK" | cut -d' ' -f1)"
-HUAWEI_SHA="$(sha256sum "$HUAWEI_OUT" | cut -d' ' -f1)"
 echo "==> GitHub APK ${APK} (${SIZE_MB} MB) sha256=${SHA}"
-echo "==> Huawei APK ${HUAWEI_OUT} (${HUAWEI_SIZE_MB} MB) sha256=${HUAWEI_SHA}"
-echo "    Huawei APK is for AppGallery upload only; it is intentionally NOT published to GitHub Releases."
 
 # Update README: versioned APK paths, current version line, and the SHA block.
 python - "$VERSION" "$SHA" <<'PY'

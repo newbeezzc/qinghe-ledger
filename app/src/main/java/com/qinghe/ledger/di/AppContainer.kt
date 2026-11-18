@@ -5,11 +5,14 @@ import com.qinghe.ledger.auto.AutoRecorder
 import com.qinghe.ledger.data.LedgerRepository
 import com.qinghe.ledger.data.SettingsRepository
 import com.qinghe.ledger.data.local.AppDatabase
+import com.qinghe.ledger.widget.WidgetUpdater
 
 class AppContainer(context: Context) {
     private val appContext = context.applicationContext
     val database: AppDatabase = AppDatabase.get(appContext)
-    val repository = LedgerRepository(database)
+    val repository = LedgerRepository(database) {
+        WidgetUpdater.refresh(appContext)
+    }
     val settings = SettingsRepository(appContext)
     val autoRecorder = AutoRecorder(appContext, repository, settings)
 }
